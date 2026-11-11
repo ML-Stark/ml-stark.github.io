@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ML Soluções</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<section id="tela-setup" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px" class="hidden">
+<form class="login-card" id="form-setup" novalidate>
+<div class="logo-txt"><b>ML</b> Soluções</div>
+<p class="login-sub">Primeira configuração — conecte o app à sua planilha</p>
+<div class="notice-info" style="margin-bottom:16px">
+Cole a <b>URL do Apps Script</b> (termina em <code>/exec</code>) e o <b>TOKEN</b> que apareceu quando você rodou <code>configurar</code> no editor do Google.
+</div>
+<div style="margin-bottom:12px">
+<label class="field-lbl" for="s-url">URL do Apps Script</label>
+<input class="inp" type="url" id="s-url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" spellcheck="false">
+</div>
+<div style="margin-bottom:12px">
+<label class="field-lbl" for="s-user">Seu usuário</label>
+<input class="inp" type="text" id="s-user" value="maik" autocomplete="username">
+</div>
+<div style="margin-bottom:6px">
+<label class="field-lbl" for="s-token">Token (é a sua senha)</label>
+<div class="in-ico"><span class="ico">🔑</span>
+<input class="inp" type="password" id="s-token" placeholder="cole o token aqui" autocomplete="off" spellcheck="false">
+<button type="button" class="eye" id="s-olho" aria-label="Mostrar ou ocultar">👁</button></div>
+</div>
+<div id="setup-erro" class="err-msg hidden" role="alert"></div>
+<button type="submit" class="btn-login" id="s-btn" style="margin-top:16px">Testar e salvar</button>
+<p style="text-align:center;font-size:.72rem;color:#64748b;margin:16px 0 0">ML Soluções · Acesso restrito</p>
+</form>
+</section>
+
+<section id="tela-login" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px" class="hidden">
+<form class="login-card" id="form-login" novalidate>
+<div class="logo-txt"><b>ML</b> Soluções</div>
+<p class="login-sub">Seu centro de controle pessoal</p>
+<div style="margin-bottom:12px">
+<label class="field-lbl" for="login-usuario">Usuário</label>
+<div class="in-ico"><span class="ico">👤</span><input class="inp" type="text" id="login-usuario" placeholder="Digite seu usuário" autocomplete="username"></div>
+</div>
+<div style="margin-bottom:6px">
+<label class="field-lbl" for="login-senha">Senha</label>
+<div class="in-ico"><span class="ico">🔒</span><input class="inp" type="password" id="login-senha" placeholder="Digite sua senha" autocomplete="current-password"><button type="button" class="eye" id="btn-olho" aria-label="Mostrar ou ocultar senha">👁</button></div>
+</div>
+<div id="login-erro" class="err-msg hidden" role="alert"></div>
+<button type="submit" class="btn-login" id="btn-entrar" style="margin-top:16px">Entrar</button>
+<div style="text-align:center;margin-top:12px"><button type="button" class="link-login" id="btn-config">Configurar conexão</button></div>
+<p style="text-align:center;font-size:.72rem;color:#64748b;margin:16px 0 0">ML Soluções · Acesso restrito</p>
+</form>
+</section>
+
+<div id="tela-app" class="hidden">
+<nav class="bottom-nav" aria-label="Navegação principal">
+<button class="nav-item active" data-nav="hub"><span class="ni">▦</span><span>Início</span></button>
+<button class="nav-item" data-nav="financeiro"><span class="ni">◆</span><span>Financeiro</span></button>
+<button class="nav-item" data-nav="ajustes"><span class="ni">⚙</span><span>Ajustes</span></button>
+<button class="nav-item" data-nav="sair"><span class="ni">⏻</span><span>Sair</span></button>
+</nav>
+
+<section id="view-hub" class="app-wrap">
+<header class="row-between" style="margin-bottom:16px">
+<div>
+<span class="eyebrow-pill">Painel do dia</span>
+<h1 style="margin:10px 0 2px;font-size:1.5rem"><b style="color:#3b82f6">ML</b> Soluções · Olá, <span id="hub-nome">Maik</span></h1>
+<p class="muted-txt" id="hub-status">Conectando à planilha…</p>
+</div>
+<div class="row-x">
+<button class="btn-s" data-nav="ajustes">⚙ Ajustes</button>
+<button class="btn-s" data-nav="sair">Sair</button>
+</div>
+</header>
+<div class="grid-3">
+<button class="hub-card" id="hub-financeiro">
+<div class="row-between"><div class="hub-ico">$</div><span class="tag tag-ok">ATIVO</span></div>
+<h2 style="font-size:1.1rem;margin-top:10px">Assistente Financeiro</h2>
+<p class="muted-txt">Lançamentos, histórico e dashboard ao vivo</p>
+</button>
+<div class="hub-card disabled" aria-disabled="true">
+<div class="row-between"><div class="hub-ico">✓</div><span class="tag tag-soon">EM BREVE</span></div>
+<h2 style="font-size:1.1rem;margin-top:10px">Assistente de Rotina</h2>
+<p class="muted-txt">Agenda, demandas e prioridades</p>
+</div>
+<div class="hub-card disabled" aria-disabled="true">
+<div class="row-between"><div class="hub-ico">♥</div><span class="tag tag-soon">EM BREVE</span></div>
+<h2 style="font-size:1.1rem;margin-top:10px">Assistente Nutricional</h2>
+<p class="muted-txt">Calorias e macronutrientes</p>
+</div>
+</div>
+<div class="grid-kpi" style="margin-top:16px">
+<div class="kpi-card"><div class="lbl">Lançamentos na base</div><div class="val" id="hub-total">—</div><div class="cap">lidos da planilha</div></div>
+<div class="kpi-card"><div class="lbl">Saldo do mês</div><div class="val" id="hub-saldo">—</div><div class="cap" id="hub-mes">—</div></div>
+<div class="kpi-card"><div class="lbl">Última leitura</div><div class="val" id="hub-sync" style="font-size:.95rem">—</div><div class="cap">fuso America/Fortaleza</div></div>
+<div class="kpi-card"><div class="lbl">Conexão</div><div class="val" id="hub-conexao" style="font-size:.95rem">—</div><div class="cap">Apps Script</div></div>
+</div>
+<footer class="app-footer">ML Soluções v2.0 — base única na planilha, sem cópia local</footer>
+</section>
+
+<section id="view-financeiro" class="app-wrap hidden">
+<header class="row-between" style="margin-bottom:14px">
+<div>
+<span class="eyebrow-pill">Módulo financeiro</span>
+<h1 style="margin:10px 0 2px;font-size:1.4rem">Controle financeiro</h1>
+<p class="muted-txt">Grava direto na planilha — celular e computador veem o mesmo</p>
+</div>
+<button class="btn-s" data-nav="hub">← Voltar</button>
+</header>
+<div class="tab-bar" role="tablist" style="margin-bottom:16px">
+<button role="tab" data-fin-tab="lancamento" class="active">Lançar</button>
+<button role="tab" data-fin-tab="historico">Histórico</button>
+<button role="tab" data-fin-tab="dashboard">Dashboard</button>
+</div>
+
+<div id="fin-lancamento" class="stack-gap">
+<div class="card-box">
+<h2 style="font-size:1.05rem">Lançamento rápido</h2>
+<p class="muted-txt">Data, descrição e valor. O resto vem da sua planilha. Mês, banco e tipo são calculados.</p>
+<form id="form-lanc" class="stack-gap" style="margin-top:14px" novalidate>
+<div class="grid-2">
+<div><label class="field-lbl" for="l-data">Data</label><input class="inp" type="date" id="l-data" required></div>
+<div><label class="field-lbl" for="l-desc">Descrição</label><input class="inp" type="text" id="l-desc" placeholder="Ex.: Padaria" maxlength="120" autocomplete="off"></div>
+</div>
+<div class="grid-2">
+<div><label class="field-lbl" for="l-valor">Valor</label>
+<div class="inp-prefix"><span>R$</span><input class="inp" type="text" inputmode="decimal" id="l-valor" placeholder="0,00"></div></div>
+<div><span class="field-lbl" id="lbl-tipo">Tipo</span>
+<div class="toggle-group" role="group">
+<button type="button" class="toggle-btn on-desp" id="t-desp" aria-pressed="true">Despesa</button>
+<button type="button" class="toggle-btn" id="t-rec" aria-pressed="false">Receita</button>
+</div></div>
+</div>
+<div class="grid-2">
+<div><label class="field-lbl" for="l-cat">Categoria</label><select class="inp" id="l-cat"></select></div>
+<div><label class="field-lbl" for="l-sub">Subcategoria</label><select class="inp" id="l-sub"></select></div>
+</div>
+<div class="grid-2">
+<div><label class="field-lbl" for="l-forma">Forma de pagamento</label><select class="inp" id="l-forma"></select></div>
+<div id="wrap-cartao"><label class="field-lbl" for="l-cartao">Cartão</label><select class="inp" id="l-cartao"></select></div>
+</div>
+<div class="card-box" style="background:#0b1220">
+<div class="row-between"><h3 style="font-size:.92rem">Preenchimento automático</h3><span class="tag tag-blue">Calculado</span></div>
+<div class="grid-3" style="margin-top:10px">
+<div><label class="field-lbl" for="a-mes">Mês</label><input class="inp" id="a-mes" readonly></div>
+<div><label class="field-lbl" for="a-banco">Banco</label><input class="inp" id="a-banco" readonly></div>
+<div><label class="field-lbl" for="a-tipo">Tipo final</label><input class="inp" id="a-tipo" readonly></div>
+</div>
+</div>
+<div><button type="submit" class="btn-p" id="btn-lancar" style="width:100%;padding:14px">Lançar na planilha</button></div>
+<div id="lanc-erro" class="err-msg hidden" role="alert"></div>
+<div id="lanc-ok" class="notice-ok hidden" role="status"></div>
+</form>
+</div>
+</div>
+
+<div id="fin-historico" class="stack-gap hidden">
+<div class="card-box">
+<div class="row-between">
+<h3 style="font-size:.95rem">Histórico</h3>
+<span class="muted-txt" id="hist-count" style="margin:0">—</span>
+</div>
+<div class="grid-2" style="margin-top:12px">
+<div><label class="field-lbl" for="h-mes">Mês</label><select class="inp" id="h-mes"></select></div>
+<div><label class="field-lbl" for="h-busca">Buscar</label><input class="inp" type="text" id="h-busca" placeholder="descrição, categoria…" autocomplete="off"></div>
+</div>
+</div>
+<div class="card-box">
+<div id="hist-lista" class="stack-gap"></div>
+</div>
+</div>
+
+<div id="fin-dashboard" class="stack-gap hidden">
+<div class="row-between">
+<span class="muted-txt" id="faixa-filtro" style="margin:0">—</span>
+<button class="btn-s" id="btn-atualizar">↻ Atualizar</button>
+</div>
+<div id="dash-alerta"></div>
+<div class="row-between" style="margin-top:4px">
+<div><label class="field-lbl" for="dash-mes">Mês</label><select class="inp" id="dash-mes" style="min-width:170px"></select></div>
+<div id="chip-filtro"></div>
+</div>
+<div id="kpis" class="grid-kpi"></div>
+<div id="insights" class="stack-gap"></div>
+<div class="grid-charts">
+<div class="card-box"><h3 style="font-size:.95rem">Despesas por categoria</h3><div id="ch-cat" style="margin-top:12px"></div></div>
+<div class="card-box"><h3 style="font-size:.95rem">Top subcategorias</h3><div id="ch-sub" style="margin-top:12px"></div></div>
+<div class="card-box"><h3 style="font-size:.95rem">Crédito vs débito por categoria</h3><div id="ch-stack" style="margin-top:12px"></div></div>
+<div class="card-box"><h3 style="font-size:.95rem">Forma de pagamento</h3><div id="ch-forma" style="margin-top:12px"></div></div>
+<div class="card-box"><h3 style="font-size:.95rem">Fatura por cartão</h3><div id="ch-cartao" style="margin-top:12px"></div></div>
+<div class="card-box"><h3 style="font-size:.95rem">Evolução mensal</h3><div id="ch-linha" style="margin-top:12px"></div></div>
+</div>
+<div class="card-box">
+<div class="row-between"><h3 style="font-size:.95rem">Conferência por mês</h3><span class="muted-txt" style="margin:0">comparável com o Resumo Mensal</span></div>
+<div id="conf-mes" style="margin-top:12px"></div>
+</div>
+</div>
+</section>
+
+<section id="view-ajustes" class="app-wrap hidden">
+<header class="row-between" style="margin-bottom:14px">
+<div>
+<span class="eyebrow-pill">Configuração</span>
+<h1 style="margin:10px 0 2px;font-size:1.4rem">Ajustes</h1>
+<p class="muted-txt">Conexão, credenciais e diagnóstico</p>
+</div>
+<button class="btn-s" data-nav="hub">← Voltar</button>
+</header>
+<div class="stack-gap">
+<div class="card-box">
+<h3 style="font-size:.95rem">Conexão com a planilha</h3>
+<div style="margin-top:12px">
+<label class="field-lbl" for="c-url">URL do Apps Script</label>
+<input class="inp" type="url" id="c-url" spellcheck="false" autocomplete="off">
+</div>
+<div style="margin-top:12px">
+<label class="field-lbl" for="c-user">Usuário</label>
+<input class="inp" type="text" id="c-user" autocomplete="username">
+</div>
+<div class="btns" style="margin-top:12px">
+<button class="btn-p" id="btn-salvar-conn">Salvar e testar</button>
+<button class="btn-s" id="btn-testar">Testar conexão</button>
+</div>
+<div id="conn-msg" style="margin-top:12px"></div>
+</div>
+<div class="card-box">
+<h3 style="font-size:.95rem">Trocar senha (token)</h3>
+<p class="muted-txt">A senha é o token da API. Para gerar um novo, rode <code>redefinirToken</code> no Apps Script e cole aqui.</p>
+<form id="form-senha" style="margin-top:12px" novalidate>
+<div><label class="field-lbl" for="p-atual">Senha atual</label><input class="inp" type="password" id="p-atual" autocomplete="current-password"></div>
+<div style="margin-top:10px"><label class="field-lbl" for="p-nova">Nova senha (token)</label><input class="inp" type="password" id="p-nova" autocomplete="new-password"></div>
+<div style="margin-top:10px"><label class="field-lbl" for="p-conf">Confirmar</label><input class="inp" type="password" id="p-conf" autocomplete="new-password"></div>
+<div class="btns" style="margin-top:12px"><button type="submit" class="btn-p">Trocar senha</button></div>
+<div id="senha-msg" style="margin-top:10px"></div>
+</form>
+</div>
+<div class="card-box">
+<h3 style="font-size:.95rem">Diagnóstico</h3>
+<div class="tbl-wrap" style="margin-top:12px">
+<table class="tbl">
+<tbody id="diag-corpo"></tbody>
+</table>
+</div>
+<div class="btns" style="margin-top:12px">
+<button class="btn-s" id="btn-reler">Reler planilha agora</button>
+<button class="btn-s" id="btn-exportar">Exportar backup JSON</button>
+</div>
+<div id="diag-msg" style="margin-top:10px"></div>
+</div>
+</div>
+<footer class="app-footer">ML Soluções v2.0 — dados na planilha Google, nada em servidor de terceiros</footer>
+</section>
+</div>
+
+<div class="modal" id="modal-editar">
+<div class="modal-card">
+<div class="row-between" style="margin-bottom:14px">
+<h3 style="font-size:1rem">Editar lançamento</h3>
+<button class="btn-ico" data-fechar="modal-editar" aria-label="Fechar">✕</button>
+</div>
+<form id="form-editar" novalidate>
+<div class="grid-2">
+<div><label class="field-lbl" for="e-data">Data</label><input class="inp" type="date" id="e-data"></div>
+<div><label class="field-lbl" for="e-valor">Valor</label><div class="inp-prefix"><span>R$</span><input class="inp" type="text" inputmode="decimal" id="e-valor"></div></div>
+</div>
+<div style="margin-top:10px"><label class="field-lbl" for="e-desc">Descrição</label><input class="inp" type="text" id="e-desc"></div>
+<div class="grid-2" style="margin-top:10px">
+<div><label class="field-lbl" for="e-cat">Categoria</label><select class="inp" id="e-cat"></select></div>
+<div><label class="field-lbl" for="e-sub">Subcategoria</label><select class="inp" id="e-sub"></select></div>
+</div>
+<div class="grid-2" style="margin-top:10px">
+<div><label class="field-lbl" for="e-forma">Forma</label><select class="inp" id="e-forma"></select></div>
+<div id="e-wrap-cartao"><label class="field-lbl" for="e-cartao">Cartão</label><select class="inp" id="e-cartao"></select></div>
+</div>
+<div id="editar-erro" class="err-msg hidden"></div>
+<div class="btns" style="margin-top:16px">
+<button type="submit" class="btn-p" id="btn-salvar-edit">Salvar na planilha</button>
+<button type="button" class="btn-s" data-fechar="modal-editar">Cancelar</button>
+</div>
+</form>
+</div>
+</div>
+
+<div class="modal" id="modal-excluir">
+<div class="modal-card">
+<h3 style="font-size:1rem">Excluir lançamento</h3>
+<div class="notice-warn" style="margin-top:12px">
+Esta ação apaga a linha <b>na planilha</b>. Não há como desfazer pelo app.
+</div>
+<div id="exc-dados" style="margin-top:12px;font-size:.88rem"></div>
+<input type="hidden" id="exc-linha">
+<input type="hidden" id="exc-assinatura">
+<div id="exc-erro" class="err-msg hidden"></div>
+<div class="btns" style="margin-top:16px">
+<button class="btn-d" id="btn-confirmar-exc">Apagar da planilha</button>
+<button class="btn-s" data-fechar="modal-excluir">Cancelar</button>
+</div>
+</div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
