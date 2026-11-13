@@ -1,0 +1,9 @@
+/* Correções de acabamento — carregado via JS */
+.inp[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;width:100%;max-width:100%;display:block;font-size:.95rem}
+.inp[type="date"]::-webkit-date-and-time-value{text-align:left}
+.inp[type="date"]::-webkit-calendar-picker-indicator{opacity:.65;cursor:pointer;margin-left:auto}
+.grid-2>*,.grid-3>*,.stack-gap>*{min-width:0}
+.logo-lockup{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.logo-img{width:40px;height:40px;border-radius:10px;flex:0 0 auto;display:block}
+.logo-lockup .logo-txt{margin-bottom:0}
+@media(max-width:420px){.inp[type="date"]{padding:11px 8px}.grid-2{gap:10px}}
