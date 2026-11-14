@@ -1,0 +1,9 @@
+{
+  "modulos": [
+    "financeiro",
+    "rotina",
+    "nutricao"
+  ],
+  "versao_app": "3.1.0",
+  "nota": "Arquivo de controle do deploy. Nao apague."
+}
