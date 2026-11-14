@@ -1,4 +1,4 @@
-/* Correções de acabamento — carregado via JS */
+/* Correções de acabamento — carregado pelo app.js */
 .inp[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;width:100%;max-width:100%;display:block;font-size:.95rem}
 .inp[type="date"]::-webkit-date-and-time-value{text-align:left}
 .inp[type="date"]::-webkit-calendar-picker-indicator{opacity:.65;cursor:pointer;margin-left:auto}
@@ -7,3 +7,14 @@
 .logo-img{width:40px;height:40px;border-radius:10px;flex:0 0 auto;display:block}
 .logo-lockup .logo-txt{margin-bottom:0}
 @media(max-width:420px){.inp[type="date"]{padding:11px 8px}.grid-2{gap:10px}}
+
+/* KPIs: 4 colunas exatas, sem celula vazia sobrando */
+#kpis.grid-kpi{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+@media(min-width:700px){#kpis.grid-kpi{grid-template-columns:repeat(4,minmax(0,1fr))}}
+#kpis .kpi-card{min-width:0;display:flex;flex-direction:column;justify-content:flex-start}
+#insights .grid-kpi{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(min-width:700px){#insights .grid-kpi{grid-template-columns:repeat(4,minmax(0,1fr))}}
+#view-hub .grid-3{margin-bottom:0}
+.card-box+.card-box{margin-top:0}
+/* filtro de receita: cards de despesa ficam neutros em vez de zero */
+.kpi-card.zerado .val{opacity:.45}
