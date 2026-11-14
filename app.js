@@ -2,8 +2,6 @@
 "use strict";
 
 var LS_URL="mls_url", LS_TOKEN="mls_token", LS_USER="mls_user", LS_SESSAO="mls_sessao";
-/* URL da API embutida: aparelho novo pede apenas o token.
-   A URL sozinha nao abre nada — sem o token a API responde "erro: token". */
 var URL_PADRAO="https://script.google.com/macros/s/AKfycbxnLUkA6dyn1I51wkVZUNeSTM3K_VTNqxUPIxxNGGI0T5wqnJum5vmNb6phziPqjno/exec";
 var MESES=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 var CORES=["#3b82f6","#22c55e","#ef4444","#eab308","#a855f7","#06b6d4","#f97316","#ec4899","#84cc16","#64748b"];
@@ -15,7 +13,6 @@ var filtroDash={tipo:null,valor:null};
 var editando=null;
 var ultimaLeitura=null;
 
-/* ---------------- Utilidades ---------------- */
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 function brl(v){return "R$ "+(Number(v)||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -40,7 +37,6 @@ function toast(msg,tipo){
   setTimeout(function(){el.style.transition="opacity .3s";el.style.opacity="0";setTimeout(function(){el.remove();},320);},2600);
 }
 
-/* ---------------- Acabamento de interface ---------------- */
 function aprimorarUI(){
   if(!document.getElementById("css-acabamento")){
     var lk=document.createElement("link");
@@ -55,6 +51,34 @@ function aprimorarUI(){
   });
   var hubKpi=document.querySelector("#view-hub .grid-kpi");
   if(hubKpi)hubKpi.remove();
+
+  if(!$("wrap-classif")&&$("l-forma")){
+    var fs=$("l-forma");
+    var bloco=fs.closest(".grid-2");
+    if(bloco&&bloco.parentNode){
+      var bx=document.createElement("div");
+      bx.id="wrap-classif"; bx.className="card-box"; bx.style.cssText="background:#0b1220;margin-top:12px";
+      bx.innerHTML='<div class="row-between"><h3 style="font-size:.92rem">Classificação</h3><span class="tag tag-blue">opcional</span></div>'+
+        '<div class="grid-2" style="margin-top:10px">'+
+        '<div><label class="field-lbl" for="l-classif">Este gasto é</label><select class="inp" id="l-classif">'+
+        '<option value="">Não classificar</option>'+
+        '<option value="Parcelado">Parcelado no cartão</option>'+
+        '<option value="Recorrente">Recorrente (mensal fixo)</option>'+
+        '<option value="Assinatura">Assinatura</option>'+
+        '<option value="Pontual">Pontual</option></select></div>'+
+        '<div id="wrap-parcelas" class="hidden"><label class="field-lbl" for="l-parcelas">Nº de parcelas</label>'+
+        '<input class="inp" type="number" min="2" max="48" id="l-parcelas" placeholder="Ex.: 3"></div></div>'+
+        '<div class="helper" id="classif-dica"></div>';
+      bloco.parentNode.insertBefore(bx,bloco.nextSibling);
+      $("l-classif").addEventListener("change",function(){
+        var t=this.value;
+        $("wrap-parcelas").classList.toggle("hidden",t!=="Parcelado");
+        $("classif-dica").textContent=t==="Parcelado"
+          ?"Grava na aba Classificacao com o nº de parcelas e o mês desta compra."
+          :(t?"Grava na aba Classificacao da planilha.":"");
+      });
+    }
+  }
   if(!$("detalhe-filtro")){
     var chip=$("chip-filtro");
     if(chip&&chip.parentNode){
@@ -64,7 +88,6 @@ function aprimorarUI(){
   }
 }
 
-/* ---------------- Config ---------------- */
 function lerCfg(){
   try{
     cfg.url=(localStorage.getItem(LS_URL)||URL_PADRAO||"").trim();
@@ -87,7 +110,6 @@ function urlValida(u){
   return /^https:\/\/[^\s]+\/exec\/?$/i.test(u.trim());
 }
 
-/* ---------------- API ---------------- */
 function urlCom(params){
   var q=[];
   for(var k in params){if(params.hasOwnProperty(k))q.push(encodeURIComponent(k)+"="+encodeURIComponent(params[k]));}
@@ -129,7 +151,6 @@ function chamarPOST(corpo){
   });
 }
 
-/* ---------------- Carregar ---------------- */
 function carregar(silencioso){
   if(!configurado())return Promise.reject(new Error("Configure a conexão primeiro."));
   if(!silencioso)setHub("Lendo a planilha…");
@@ -150,7 +171,6 @@ function carregar(silencioso){
 }
 function setHub(txt){var e=$("hub-status");if(e)e.textContent=txt;}
 
-/* ---------------- Dicionario ---------------- */
 function aplicarDicionario(){
   var cats=dados&&dados.categorias?dados.categorias:{};
   var nomes=Object.keys(cats);
@@ -177,7 +197,6 @@ function preencherSubs(catId,subId){
   $(subId).innerHTML=subs.map(function(s){return '<option value="'+esc(s)+'">'+esc(s)+'</option>';}).join("");
 }
 
-/* ---------------- Auto-preenchimento ---------------- */
 function bancoDoCartao(nome){
   var cartoes=(dados&&dados.cartoes)||[];
   for(var i=0;i<cartoes.length;i++){if(cartoes[i].nome===nome)return cartoes[i].banco||"";}
@@ -202,7 +221,6 @@ function setTipo(t){
   atualizarAuto();
 }
 
-/* ---------------- Lancar ---------------- */
 function validarForm(){
   var desc=$("l-desc").value.trim();
   var valor=parseValor($("l-valor").value);
@@ -237,6 +255,13 @@ function lancar(e){
     cartao:forma==="Cartão de Crédito"?$("l-cartao").value:""
   };
 
+  var tipoC=$("l-classif")?$("l-classif").value:"";
+  if(tipoC){
+    item.classif={tipo:tipoC,
+      parcelas:tipoC==="Parcelado"?(Number($("l-parcelas").value)||0):0,
+      mesInicio:tipoC==="Parcelado"?String(item.data).slice(0,7):""};
+  }
+
   var btn=$("btn-lancar");
   btn.disabled=true;
   btn.innerHTML='<span class="spinner"></span> Gravando…';
@@ -260,6 +285,7 @@ function lancar(e){
       $("l-desc").value="";$("l-valor").value="";
       $("l-data").value=hojeISO();
       $("l-forma").value=formaMantida;
+      if($("l-classif")){$("l-classif").value="";$("wrap-parcelas").classList.add("hidden");$("classif-dica").textContent="";}
       setTipo(tipoMantido);
       return carregar(true).then(function(){
         ok.textContent=ok.textContent.replace("Sincronizando…","Dashboard atualizado.");
@@ -275,7 +301,6 @@ function lancar(e){
     });
 }
 
-/* ---------------- Historico ---------------- */
 function preencherOpcoes(){
   var meses=mesesDisponiveis();
   var sel=$("dash-mes");
@@ -336,7 +361,6 @@ function acharLinha(linha){
   return null;
 }
 
-/* ---------------- Editar ---------------- */
 function abrirEditar(linha){
   var l=acharLinha(linha);
   if(!l){toast("Lançamento não encontrado. Atualize.","erro");return;}
@@ -390,7 +414,6 @@ function salvarEdicao(e){
   });
 }
 
-/* ---------------- Excluir ---------------- */
 function abrirExcluir(linha){
   var l=acharLinha(linha);
   if(!l){toast("Lançamento não encontrado. Atualize.","erro");return;}
@@ -419,16 +442,15 @@ function confirmarExclusao(){
   });
 }
 
-/* ---------------- Base do dashboard ---------------- */
 function baseMes(mes){
   var t=todosLancamentos();
   return mes==="todos"?t:t.filter(function(l){return String(l.mes).indexOf(mes)===0;});
 }
 function comChip(lista){
   if(!filtroDash.tipo)return lista;
-  if(filtroDash.tipo==="categoria")return lista.filter(function(l){return l.categoria===filtroDash.valor&&l.tipo==="Despesa";});
-  if(filtroDash.tipo==="sub")return lista.filter(function(l){return l.subcategoria===filtroDash.valor&&l.tipo==="Despesa";});
-  if(filtroDash.tipo==="forma")return lista.filter(function(l){return l.forma===filtroDash.valor&&l.tipo==="Despesa";});
+  if(filtroDash.tipo==="categoria")return lista.filter(function(l){return l.categoria===filtroDash.valor;});
+  if(filtroDash.tipo==="sub")return lista.filter(function(l){return l.subcategoria===filtroDash.valor;});
+  if(filtroDash.tipo==="forma")return lista.filter(function(l){return l.forma===filtroDash.valor;});
   return lista;
 }
 function filtrado(){return comChip(baseMes($("dash-mes").value||"todos"));}
@@ -456,7 +478,7 @@ function renderKPIs(){
   var maior=cats[0]||["—",0];
   var pc=td?(maior[1]/td*100):0;
   var mes=$("dash-mes").value||"todos";
-  $("faixa-filtro").textContent=(mes==="todos"?"Todos os meses":mesLabel(mes))+" · "+base.length+" lançamentos ("+desp.length+" despesas, "+rec.length+" receitas)";
+  $("faixa-filtro").textContent=(mes==="todos"?"Todos os meses":mesLabel(mes))+(filtroDash.tipo?" · filtro: "+filtroDash.valor:"")+" · "+base.length+" lançamentos ("+desp.length+" despesas, "+rec.length+" receitas)";
   $("kpis").innerHTML=[
     kpi("Total Despesas",brl(td),"neg",desp.length+" lançamentos"),
     kpi("Despesas Crédito",brl(cred),"neg","faturas de cartão"),
@@ -464,7 +486,8 @@ function renderKPIs(){
     kpi("Total Receitas",brl(tr),"pos",rec.length+" entradas"),
     kpi("Saldo",brl(saldo),saldo<0?"neg":"pos",saldo<0?"despesas acima das receitas":"receitas cobrem despesas"),
     kpi("Maior Categoria",esc(maior[0]),"",brl(maior[1])+" · "+pct(pc)+" das despesas"),
-    kpi("Média por lançamento",brl(desp.length?td/desp.length:0),"",desp.length+" despesas")
+    kpi("Média por lançamento",brl(desp.length?td/desp.length:0),"",desp.length+" despesas"),
+    kpi("Lançamentos",String(base.length),"",desp.length+" despesas · "+rec.length+" receitas")
   ].join("");
 }
 function kpi(lbl,val,cls,cap){
@@ -490,7 +513,6 @@ function renderAlerta(){
   alvo.innerHTML=h;
 }
 
-/* ---------------- Classificacao (vem da planilha) ---------------- */
 function classifDe(l){
   var tab=(dados&&dados.classificacao)||{};
   var k=String(l.descricao||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();
@@ -611,7 +633,6 @@ function renderInsights(){
   $("insights").innerHTML=h;
 }
 
-/* ---------------- Graficos ---------------- */
 function svgDonut(host,grade,onClick){
   var total=grade.reduce(function(a,d){return a+d[1];},0);
   if(!total){host.innerHTML='<p class="muted-txt">Sem dados para este filtro.</p>';return;}
@@ -728,7 +749,6 @@ function renderConferencia(){
   $("conf-mes").innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mês</th><th class="num">Qtd</th><th class="num">Despesas</th><th class="num">Receitas</th><th class="num">Saldo</th></tr></thead><tbody>'+linhas+'</tbody></table></div>';
 }
 
-/* ---------------- Filtro do grafico + detalhe ---------------- */
 function renderChip(){
   var h=$("chip-filtro"), det=$("detalhe-filtro");
   if(!filtroDash.tipo){h.innerHTML="";if(det)det.innerHTML="";return;}
@@ -771,7 +791,6 @@ function renderDashboard(){
   renderConferencia();
 }
 
-/* ---------------- Hub ---------------- */
 function renderHub(){
   var t=todosLancamentos();
   var el;
@@ -791,7 +810,6 @@ function renderHub(){
   setHub("Base única na planilha · "+t.length+" lançamentos");
 }
 
-/* ---------------- Navegacao ---------------- */
 function mostrarView(nome){
   ["hub","financeiro","ajustes"].forEach(function(v){$("view-"+v).classList.toggle("hidden",v!==nome);});
   document.querySelectorAll(".bottom-nav .nav-item").forEach(function(b){b.classList.toggle("active",b.dataset.nav===nome);});
@@ -816,7 +834,6 @@ function sair(){
   toast("Sessão encerrada");
 }
 
-/* ---------------- Login ---------------- */
 function iniciarLogin(){
   $("tela-setup").classList.add("hidden");
   $("tela-app").classList.add("hidden");
@@ -850,7 +867,6 @@ function tentarLogin(e){
   });
 }
 
-/* ---------------- Setup ---------------- */
 function testarESalvarSetup(e){
   e.preventDefault();
   var url=$("s-url").value.trim(),user=$("s-user").value.trim(),tok=$("s-token").value.trim();
@@ -881,7 +897,6 @@ function testarESalvarSetup(e){
   });
 }
 
-/* ---------------- Ajustes ---------------- */
 function atualizarDiagnostico(){
   var linhas=[
     ["URL configurada",cfg.url?'<span class="pos">sim</span>':'<span class="neg">não</span>'],
@@ -950,7 +965,6 @@ function exportar(){
   toast("Backup exportado","ok");
 }
 
-/* ---------------- Bind ---------------- */
 function bind(){
   lerCfg();
   aprimorarUI();
@@ -1039,7 +1053,6 @@ function bind(){
     m.addEventListener("click",function(e){if(e.target===m)m.classList.remove("open");});
   });
 
-  // ---------- Inicio ----------
   $("l-data").value=hojeISO();
   if(!configurado()){
     $("tela-setup").classList.remove("hidden");
