@@ -11,10 +11,9 @@
 /* KPIs: 4 colunas exatas, sem celula vazia sobrando */
 #kpis.grid-kpi{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
 @media(min-width:700px){#kpis.grid-kpi{grid-template-columns:repeat(4,minmax(0,1fr))}}
-#kpis .kpi-card{min-width:0;display:flex;flex-direction:column;justify-content:flex-start}
+#kpis .kpi-card{min-width:0;display:flex;flex-direction:column}
 #insights .grid-kpi{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(min-width:700px){#insights .grid-kpi{grid-template-columns:repeat(4,minmax(0,1fr))}}
 #view-hub .grid-3{margin-bottom:0}
-.card-box+.card-box{margin-top:0}
-/* filtro de receita: cards de despesa ficam neutros em vez de zero */
-.kpi-card.zerado .val{opacity:.45}
+/* detalhe do donut logo abaixo do filtro, sem colar no grafico */
+#detalhe-filtro{width:100%;order:99}
