@@ -52,6 +52,18 @@ function aprimorarUI(){
   var hubKpi=document.querySelector("#view-hub .grid-kpi");
   if(hubKpi)hubKpi.remove();
 
+  var grade=document.querySelector("#fin-dashboard .grid-charts");
+  if(grade&&!$("ch-rec")){
+    var t=document.querySelectorAll("#fin-dashboard .grid-charts .card-box h3");
+    if(t[0])t[0].textContent="Despesas por categoria";
+    if(t[1])t[1].textContent="Top subcategorias (despesas)";
+    if(t[3])t[3].textContent="Forma de pagamento (despesas)";
+    var cardRec=document.createElement("div");
+    cardRec.className="card-box";
+    cardRec.innerHTML='<h3 style="font-size:.95rem">Receitas por categoria</h3><div id="ch-rec" style="margin-top:12px"></div>';
+    grade.insertBefore(cardRec,grade.children[1]||null);
+  }
+
   if(!$("wrap-classif")&&$("l-forma")){
     var fs=$("l-forma");
     var bloco=fs.closest(".grid-2");
@@ -511,9 +523,10 @@ function classifDe(l){
   var k=String(l.descricao||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();
   return tab[k]||null;
 }
+/** Tipo declarado na aba Classificacao ('' = nao classificado). */
 function tipoDoItem(l){
   var c=classifDe(l);
-  return c&&c.tipo?c.tipo:"";
+  return (c&&c.tipo)?c.tipo:"";
 }
 function mesFimParcela(l){
   var c=classifDe(l);
@@ -524,6 +537,37 @@ function mesFimParcela(l){
 }
 function ymHoje(){var d=new Date();return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2);}
 
+/** Categorias usadas em lancamentos de RECEITA. */
+function catsReceita(){
+  var m={};
+  todosLancamentos().forEach(function(l){ if(l.tipo==="Receita"&&l.categoria) m[l.categoria]=1; });
+  return m;
+}
+
+/** Media diaria de gasto variavel nos meses FECHADOS. */
+function ritmoVariavel(){
+  var todos=todosLancamentos().filter(function(l){return l.tipo==="Despesa";});
+  var porMes={};
+  todos.forEach(function(l){
+    var m=String(l.mes||"").slice(0,7); if(!m)return;
+    var t=tipoDoItem(l);
+    if(t==="Assinatura"||t==="Recorrente"||t==="Parcelado")return;
+    if(!porMes[m])porMes[m]={val:0,dias:0};
+    porMes[m].val+=Number(l.valor)||0;
+    var d=+String(l.data).slice(8,10)||0;
+    if(d>porMes[m].dias)porMes[m].dias=d;
+  });
+  var hoje=ymHoje();
+  var taxas=[];
+  for(var m in porMes){
+    if(m===hoje)continue;
+    var o=porMes[m];
+    if(o.dias>=28&&o.val>0)taxas.push(o.val/o.dias);
+  }
+  if(!taxas.length)return 0;
+  return taxas.reduce(function(a,b){return a+b;},0)/taxas.length;
+}
+
 function insightsDe(mes){
   var todos=todosLancamentos();
   var desp=todos.filter(function(l){return l.tipo==="Despesa";});
@@ -532,38 +576,38 @@ function insightsDe(mes){
     var ms=mesesDisponiveis();
     alvo=ms.length?ms[ms.length-1]:null;
   }
-  var vazio={assinatura:0,parcelado:0,variavel:0,recorrente:0,naoClass:0,qtdNaoClass:0,
-             proj:null,fixoPago:0,varPago:0,receita:0,lista:[],alvo:""};
+  var vazio={assinatura:0,parcelado:0,recorrente:0,variavel:0,lancado:0,
+             proj:null,fixoPago:0,varPago:0,receita:0,lista:[],alvo:"",ritmo:0,dia:1,dias:30};
   if(!alvo)return vazio;
 
   var doMes=desp.filter(function(l){return String(l.mes).indexOf(alvo)===0;});
-  var assinatura=0, parcelado=0, recorrente=0, variavel=0, naoClass=0, qtdNaoClass=0;
+  var assinatura=0, parcelado=0, recorrente=0, variavel=0, lancado=0;
   var parcelasAtivas={};
 
   doMes.forEach(function(l){
     var t=tipoDoItem(l);
     var v=Number(l.valor)||0;
+    lancado+=v;
     if(t==="Assinatura")assinatura+=v;
     else if(t==="Parcelado"){
       parcelado+=v;
       if(!parcelasAtivas[l.descricao])parcelasAtivas[l.descricao]={valor:v,fim:mesFimParcela(l)};
     }
     else if(t==="Recorrente")recorrente+=v;
-    else if(t==="Pontual")variavel+=v;
-    else {naoClass+=v;qtdNaoClass++;variavel+=v;}
+    else variavel+=v;
   });
 
   var anoAlvo=alvo.slice(0,7);
   var fixoPago=assinatura+recorrente+parcelado;
   var receita=soma(todos.filter(function(l){return l.tipo==="Receita"&&String(l.mes).indexOf(alvo)===0;}),"valor");
-  var proj=null;
+  var proj=null, ritmo=0, dia=1, diasNoMes=30;
 
   if(anoAlvo===ymHoje()){
     var d=new Date();
-    var dia=d.getDate();
-    var diasNoMes=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
-    var ritmo=dia>0?variavel/dia:0;
-    proj=Math.round((receita-(fixoPago+ritmo*diasNoMes))*100)/100;
+    dia=d.getDate();
+    diasNoMes=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+    ritmo=ritmoVariavel();
+    proj=Math.round((receita-fixoPago-variavel-ritmo*(diasNoMes-dia))*100)/100;
   }
 
   var lista=[];
@@ -573,19 +617,18 @@ function insightsDe(mes){
   lista.sort(function(a,b){return b.valor-a.valor;});
 
   return {assinatura:assinatura,parcelado:parcelado,recorrente:recorrente,variavel:variavel,
-          naoClass:naoClass,qtdNaoClass:qtdNaoClass,proj:proj,fixoPago:fixoPago,
-          varPago:variavel,receita:receita,lista:lista,alvo:anoAlvo};
+          lancado:lancado,proj:proj,fixoPago:fixoPago,varPago:variavel,receita:receita,
+          lista:lista,alvo:anoAlvo,ritmo:ritmo,dia:dia,dias:diasNoMes};
 }
 
 function renderInsights(){
   var i=insightsDe($("dash-mes").value||"todos");
-  var td=soma(filtrado().filter(function(l){return l.tipo==="Despesa";}),"valor");
 
   var cards=[
     ["Assinaturas",brl(i.assinatura),"por mês · "+brl(i.assinatura*12)+"/ano","#a855f7"],
     ["Parcelado",brl(i.parcelado),i.lista.length?i.lista.length+" parcela(s) ativa(s)":"—","#f97316"],
-    ["Recorrente",brl(i.recorrente),"aluguel, seguros, escola…","#3b82f6"],
-    ["Variável",brl(i.variavel),td?pct(i.variavel/td*100)+" das despesas":"—","#22c55e"]
+    ["Recorrente",brl(i.recorrente),"aluguel, seguros, telefone…","#3b82f6"],
+    ["Variável",brl(i.variavel),i.lancado?pct(i.variavel/i.lancado*100)+" das despesas":"—","#22c55e"]
   ];
   var h='<div class="grid-kpi">'+cards.map(function(c){
     return '<div class="kpi-card"><div class="lbl">'+c[0]+'</div><div class="val" style="color:'+c[3]+'">'+c[1]+'</div><div class="cap">'+c[2]+'</div></div>';
@@ -599,40 +642,29 @@ function renderInsights(){
        i.lista.map(function(p){
          var fim=p.fim?mesLabel(p.fim+"-01"):'<span class="muted-txt">informar na planilha</span>';
          return '<tr><td>'+esc(p.nome)+'</td><td class="num">'+brl(p.valor)+'</td><td>'+fim+'</td></tr>';
-       }).join('')+'</tbody></table></div>'+
-       '<div class="helper">Preencha <b>Parcelas</b> e <b>Mês Início</b> na aba <b>Classificacao</b> da planilha para aparecer o mês final.</div></div>';
-  }
-
-  if(i.qtdNaoClass>0){
-    h+='<div class="notice-warn" style="margin-top:2px"><strong>'+i.qtdNaoClass+' lançamento(s) sem classificação</strong> — '+brl(i.naoClass)+
-       ' neste mês. Entram como Variável até você marcá-los na aba <b>Classificacao</b>.</div>';
+       }).join('')+'</tbody></table></div></div>';
   }
 
   if(i.proj!==null){
-    var hoje=new Date();
-    var diasNoMes=new Date(hoje.getFullYear(),hoje.getMonth()+1,0).getDate();
-    var varProj=Math.max(0,(i.receita-i.fixoPago)-i.proj-i.varPago);
+    var falta=i.dias-i.dia;
+    var varRestante=i.ritmo*falta;
     h+='<div class="card-box"><div class="row-between"><h3 style="font-size:.95rem">Projeção de fechamento</h3>'+
        '<span class="tag '+(i.proj<0?"tag-red":"tag-ok")+'">'+(i.proj<0?"falta ":"sobra ")+brl(Math.abs(i.proj))+'</span></div>'+
        '<div style="font-size:1.5rem;font-weight:700;margin-top:8px" class="'+(i.proj<0?"neg":"pos")+'">'+brl(i.proj)+'</div>'+
        '<div class="tbl-wrap" style="margin-top:10px"><table class="tbl"><tbody>'+
-       '<tr><td>Receita lançada</td><td class="num pos">'+brl(i.receita)+'</td></tr>'+
-       '<tr><td>Fixos lançados (assinatura + parcela + recorrente)</td><td class="num neg">−'+brl(i.fixoPago)+'</td></tr>'+
-       '<tr><td>Variável lançado até hoje</td><td class="num neg">−'+brl(i.varPago)+'</td></tr>'+
-       '<tr><td>Variável projetado (dia '+hoje.getDate()+' de '+diasNoMes+')</td><td class="num neg">−'+brl(varProj)+'</td></tr>'+
+       '<tr><td>Receita lançada</td><td class="num pos">+'+brl(i.receita)+'</td></tr>'+
+       '<tr><td>Fixos do mês (assinatura + parcela + recorrente)</td><td class="num neg">−'+brl(i.fixoPago)+'</td></tr>'+
+       '<tr><td>Variável já lançado</td><td class="num neg">−'+brl(i.varPago)+'</td></tr>'+
+       '<tr><td>Variável que ainda vai sair ('+falta+' dias × '+brl(i.ritmo)+'/dia)</td><td class="num neg">−'+brl(varRestante)+'</td></tr>'+
+       '<tr><td><b>Saldo projetado no fim do mês</b></td><td class="num '+(i.proj<0?"neg":"pos")+'"><b>'+brl(i.proj)+'</b></td></tr>'+
        '</tbody></table></div>'+
-       '<div class="helper">Receita − fixos − variável no ritmo dos dias já decorridos. A precisão aumenta conforme você classifica os itens na planilha.</div></div>';
+       '<div class="helper">Critério: a média diária de gasto variável dos meses já fechados é aplicada aos '+falta+
+       ' dias que faltam. Se você gastar menos que essa média, o saldo melhora.</div></div>';
   }
   $("insights").innerHTML=h;
 }
 
-/* Categorias que sao receita ficam verdes; o resto usa a paleta. */
-function catsReceita(){
-  var m={};
-  todosLancamentos().forEach(function(l){ if(l.tipo==="Receita"&&l.categoria) m[l.categoria]=1; });
-  return m;
-}
-function svgDonut(host,grade,onClick,verdes){
+function svgDonut(host,grade,onClick,verdes,escopo){
   var total=grade.reduce(function(a,d){return a+d[1];},0);
   if(!total){host.innerHTML='<p class="muted-txt">Sem dados para este filtro.</p>';return;}
   var size=200,r=78,cx=100,cy=100,sw=30;
@@ -646,7 +678,8 @@ function svgDonut(host,grade,onClick,verdes){
   var leg=grade.map(function(d,i){
     return '<button class="legend-item" data-idx="'+i+'"><span class="legend-sw" style="background:'+corDe(d[0],i)+'"></span><span style="flex:1">'+esc(d[0])+'</span><span class="muted-txt" style="margin:0">'+Math.round(d[1]/total*100)+'%</span></button>';
   }).join("");
-  host.innerHTML='<div class="donut-wrap"><svg viewBox="0 0 '+size+' '+size+'">'+arcs+
+  var marca=escopo?'<div class="muted-txt" style="margin:0 0 6px;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em">'+escopo+'</div>':'';
+  host.innerHTML=marca+'<div class="donut-wrap"><svg viewBox="0 0 '+size+' '+size+'">'+arcs+
     '<text x="'+cx+'" y="'+(cy-2)+'" text-anchor="middle" class="svg-tip" style="font-size:13px">'+brl(total)+'</text>'+
     '<text x="'+cx+'" y="'+(cy+14)+'" text-anchor="middle" class="svg-axis">total</text></svg>'+
     '<div class="legend-list">'+leg+'</div></div>';
@@ -676,11 +709,11 @@ function svgEmpilhadas(host,labels,cred,deb){
     var x=pad.l+i*bw+bw*0.18,wb=bw*0.64;
     var hD=(deb[i]/max)*hAll,hC=(cred[i]/max)*hAll;
     var yD=H-pad.b-hD,yC=yD-hC;
-    return '<rect x="'+x+'" y="'+yD+'" width="'+wb+'" height="'+hD+'" fill="#22c55e" rx="3"><title>'+esc(l)+' · Débito: '+brl(deb[i])+'</title></rect>'+
+    return '<rect x="'+x+'" y="'+yD+'" width="'+wb+'" height="'+hD+'" fill="#9ca3af" rx="3"><title>'+esc(l)+' · Débito: '+brl(deb[i])+'</title></rect>'+
       '<rect x="'+x+'" y="'+yC+'" width="'+wb+'" height="'+hC+'" fill="#3b82f6" rx="3"><title>'+esc(l)+' · Crédito: '+brl(cred[i])+'</title></rect>'+
       '<text x="'+(x+wb/2)+'" y="'+(H-pad.b+14)+'" text-anchor="end" transform="rotate(-35 '+(x+wb/2)+' '+(H-pad.b+14)+')" class="svg-axis">'+esc(String(l).substring(0,14))+'</text>';
   }).join("");
-  var leg='<g transform="translate('+(W-190)+',6)"><rect width="10" height="10" fill="#3b82f6"/><text x="16" y="9" class="svg-axis">Crédito</text><rect x="78" width="10" height="10" fill="#22c55e"/><text x="94" y="9" class="svg-axis">Débito</text></g>';
+  var leg='<g transform="translate('+(W-190)+',6)"><rect width="10" height="10" fill="#3b82f6"/><text x="16" y="9" class="svg-axis">Crédito</text><rect x="78" width="10" height="10" fill="#9ca3af"/><text x="94" y="9" class="svg-axis">Débito</text></g>';
   host.innerHTML='<svg viewBox="0 0 '+W+' '+H+'">'+leg+cols+'</svg>';
 }
 function svgLinha(host,labels,series,destaque){
@@ -704,37 +737,41 @@ function svgLinha(host,labels,series,destaque){
 function renderGraficos(){
   var mes=$("dash-mes").value||"todos";
   var base=filtrado();
+  var desp=base.filter(function(l){return l.tipo==="Despesa";});
+  var rec=base.filter(function(l){return l.tipo==="Receita";});
   var verdes=catsReceita();
-  svgDonut($("ch-cat"),agrupar(base,function(l){return l.categoria;}),function(v){aplicarFiltro("categoria",v,"ch-cat");},verdes);
-  svgDonut($("ch-sub"),agrupar(base,function(l){return l.subcategoria;}).slice(0,8),function(v){aplicarFiltro("sub",v,"ch-sub");},verdes);
+
+  // Despesa e receita em donuts SEPARADOS: nunca somam.
+  svgDonut($("ch-cat"),agrupar(desp,function(l){return l.categoria;}),function(v){aplicarFiltro("categoria",v,"ch-cat");},null,"Despesas");
+  svgDonut($("ch-sub"),agrupar(desp,function(l){return l.subcategoria;}).slice(0,8),function(v){aplicarFiltro("sub",v,"ch-sub");},null,"Despesas");
+  svgDonut($("ch-forma"),agrupar(desp,function(l){return l.forma;}),function(v){aplicarFiltro("forma",v,"ch-forma");},null,"Despesas");
+  if($("ch-rec"))svgDonut($("ch-rec"),agrupar(rec,function(l){return l.categoria;}),function(v){aplicarFiltro("categoria",v,"ch-rec");},verdes,"Receitas");
 
   var cats={};
-  base.forEach(function(l){if(l.tipo==="Despesa")cats[l.categoria]=1;});
+  desp.forEach(function(l){cats[l.categoria]=1;});
   var lista=Object.keys(cats).sort();
   var cred=lista.map(function(c){
-    return soma(base.filter(function(l){return l.tipo==="Despesa"&&l.categoria===c&&l.forma==="Cartão de Crédito";}),"valor");
+    return soma(desp.filter(function(l){return l.categoria===c&&l.forma==="Cartão de Crédito";}),"valor");
   });
   var deb=lista.map(function(c){
-    return soma(base.filter(function(l){return l.tipo==="Despesa"&&l.categoria===c&&l.forma!=="Cartão de Crédito";}),"valor");
+    return soma(desp.filter(function(l){return l.categoria===c&&l.forma!=="Cartão de Crédito";}),"valor");
   });
   svgEmpilhadas($("ch-stack"),lista,cred,deb);
 
-  svgDonut($("ch-forma"),agrupar(base,function(l){return l.forma;}),function(v){aplicarFiltro("forma",v,"ch-forma");});
-
-  var cart=agrupar(base.filter(function(l){return l.forma==="Cartão de Crédito"&&l.cartao;}),function(l){return l.cartao;},false);
+  var cart=agrupar(desp.filter(function(l){return l.forma==="Cartão de Crédito"&&l.cartao;}),function(l){return l.cartao;},false);
   if(cart.length)svgBarras($("ch-cartao"),cart.map(function(c){return c[0];}),cart.map(function(c){return c[1];}),"#3b82f6");
   else $("ch-cartao").innerHTML='<p class="muted-txt">Nenhuma fatura de crédito no período.</p>';
 
   var ms=mesesDisponiveis();
   var todos=todosLancamentos();
-  var desp=ms.map(function(m){
+  var despM=ms.map(function(m){
     return soma(todos.filter(function(l){return l.tipo==="Despesa"&&String(l.mes).indexOf(m)===0;}),"valor");
   });
-  var rec=ms.map(function(m){
+  var recM=ms.map(function(m){
     return soma(todos.filter(function(l){return l.tipo==="Receita"&&String(l.mes).indexOf(m)===0;}),"valor");
   });
   svgLinha($("ch-linha"),ms.map(function(m){return MESES[+m.slice(5,7)-1].slice(0,3);}),
-    [{nome:"Despesas",cor:"#ef4444",valores:desp},{nome:"Receitas",cor:"#22c55e",valores:rec}],
+    [{nome:"Despesas",cor:"#ef4444",valores:despM},{nome:"Receitas",cor:"#22c55e",valores:recM}],
     mes==="todos"?-1:ms.indexOf(mes));
 }
 function renderConferencia(){
@@ -750,7 +787,6 @@ function renderConferencia(){
   $("conf-mes").innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mês</th><th class="num">Qtd</th><th class="num">Despesas</th><th class="num">Receitas</th><th class="num">Saldo</th></tr></thead><tbody>'+linhas+'</tbody></table></div>';
 }
 
-/* Detalhe do donut: aparece DENTRO do card do grafico clicado, nao no topo. */
 function renderChip(){
   var h=$("chip-filtro");
   var antigos=document.querySelectorAll(".detalhe-inline");
