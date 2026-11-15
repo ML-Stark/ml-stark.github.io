@@ -1,5 +1,4 @@
-/* Ordenacao das tabelas de detalhe do grafico (detalhe-inline).
-   Usa delegacao de evento: sobrevive a re-renderizacoes da tabela. */
+/* Ordenacao das tabelas de detalhe do grafico (detalhe-inline). */
 (function(){
 "use strict";
 
@@ -7,9 +6,9 @@ var st=document.createElement("style");
 st.textContent=
   ".detalhe-inline thead th{cursor:pointer;user-select:none;white-space:nowrap}"+
   ".detalhe-inline thead th:hover{color:#93c5fd}"+
-  ".detalhe-inline thead th.ordem-asc::after{content:' \\25B4';opacity:.95}"+
-  ".detalhe-inline thead th.ordem-desc::after{content:' \\25BE';opacity:.95}"+
-  ".detalhe-inline thead th:not(.ordem-asc):not(.ordem-desc)::after{content:' \\2195';opacity:.25}"+
+  ".detalhe-inline thead th.ordem-asc::after{content:' \u25B4';opacity:.95}"+
+  ".detalhe-inline thead th.ordem-desc::after{content:' \u25BE';opacity:.95}"+
+  ".detalhe-inline thead th:not(.ordem-asc):not(.ordem-desc)::after{content:' \u2195';opacity:.3}"+
   "@media(max-width:700px){.detalhe-inline thead th{font-size:.66rem}}";
 document.head.appendChild(st);
 
