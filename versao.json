@@ -1,5 +1,6 @@
 {
-  "versao": "6.0",
+  "versao": "6.0.1",
   "recurso": "alerta de itens fixos nao lancados no mes",
-  "data": "2026-11-15"
+  "data": "2026-11-15",
+  "nota": "gatilho de rebuild do Pages"
 }
