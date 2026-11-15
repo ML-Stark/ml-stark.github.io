@@ -1,9 +1,5 @@
 {
-  "modulos": [
-    "financeiro",
-    "rotina",
-    "nutricao"
-  ],
-  "versao_app": "3.1.0",
-  "nota": "Arquivo de controle do deploy. Nao apague."
+  "versao": "6.0",
+  "recurso": "alerta de itens fixos nao lancados no mes",
+  "data": "2026-11-15"
 }
