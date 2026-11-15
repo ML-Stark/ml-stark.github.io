@@ -1,16 +1,35 @@
-/* Ordenacao das tabelas de detalhe do grafico (detalhe-inline). */
+/* Ordenacao das tabelas de detalhe do grafico (detalhe-inline).
+   O indicador e escrito direto no elemento (sem depender de ::after). */
 (function(){
 "use strict";
 
-var st=document.createElement("style");
-st.textContent=
-  ".detalhe-inline thead th{cursor:pointer;user-select:none;white-space:nowrap}"+
-  ".detalhe-inline thead th:hover{color:#93c5fd}"+
-  ".detalhe-inline thead th.ordem-asc::after{content:' \u25B4';opacity:.95}"+
-  ".detalhe-inline thead th.ordem-desc::after{content:' \u25BE';opacity:.95}"+
-  ".detalhe-inline thead th:not(.ordem-asc):not(.ordem-desc)::after{content:' \u2195';opacity:.3}"+
-  "@media(max-width:700px){.detalhe-inline thead th{font-size:.66rem}}";
-document.head.appendChild(st);
+var ASC="\u25B4", DESC="\u25BE", NEUTRO="\u2195";
+
+function prepararCabecalhos(){
+  var ths=document.querySelectorAll(".detalhe-inline thead th");
+  for(var i=0;i<ths.length;i++){
+    var th=ths[i];
+    th.style.cursor="pointer";
+    th.style.userSelect="none";
+    th.style.webkitUserSelect="none";
+    th.style.whiteSpace="nowrap";
+    th.setAttribute("title","Toque para ordenar por esta coluna");
+  }
+}
+
+function marcarSeta(th,dir){
+  var todos=th.parentNode.cells;
+  for(var i=0;i<todos.length;i++){
+    var h=todos[i];
+    if(!h.dataset.titulo)h.dataset.titulo=h.textContent.replace(/[\u25B4\u25BE\u2195]/g,"").trim();
+    h.textContent=h.dataset.titulo;
+    h.style.color="";
+  }
+  if(dir!==0){
+    th.textContent=th.dataset.titulo+" "+(dir===-1?DESC:ASC);
+    th.style.color="#93c5fd";
+  }
+}
 
 function numero(txt){
   var s=String(txt||"").replace(/[^\d,.-]/g,"").replace(/\./g,"").replace(",",".");
@@ -56,13 +75,25 @@ document.addEventListener("click",function(ev){
   var indice=irmaos.indexOf(th);
   if(indice<0)return;
 
-  var atual = th.classList.contains("ordem-asc") ? 1
-            : th.classList.contains("ordem-desc") ? -1 : 0;
-  var dir = atual===0 ? (indice===4 ? -1 : 1) : -atual;
+  var asc=th.dataset.dir==="asc";
+  var desc=th.dataset.dir==="desc";
+  var dir = (!asc&&!desc) ? (indice===4 ? -1 : 1) : (asc ? -1 : 1);
 
-  irmaos.forEach(function(h){h.classList.remove("ordem-asc","ordem-desc");});
-  th.classList.add(dir===-1?"ordem-desc":"ordem-asc");
+  irmaos.forEach(function(h){delete h.dataset.dir;});
+  th.dataset.dir = dir===-1?"desc":"asc";
 
+  marcarSeta(th,dir);
   ordenar(tabela.tBodies[0],indice,dir);
 },true);
+
+var obs=null;
+function observar(){
+  if(typeof MutationObserver==="undefined")return;
+  obs=new MutationObserver(function(){prepararCabecalhos();});
+  obs.observe(document.body,{childList:true,subtree:true});
+}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",observar);
+else observar();
+setTimeout(prepararCabecalhos,300);
+setTimeout(prepararCabecalhos,1200);
 })();
