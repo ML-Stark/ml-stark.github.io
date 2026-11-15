@@ -22,9 +22,7 @@ function hojeISO(){var d=new Date();return d.getFullYear()+"-"+("0"+(d.getMonth(
 function mesDe(iso){return iso?iso.slice(0,7)+"-01":"";}
 function mesLabel(ym){if(!ym)return "—";var p=ym.split("-");return MESES[+p[1]-1]+"/"+p[0];}
 
-/* ---------------- Mascara de moeda ----------------
-   Digita-se apenas digitos; o campo formata sozinho (1.234,56).
-   Os dois ultimos digitos sao os centavos. */
+/* Mascara de moeda: digita-se apenas digitos; formata 1.234,56 sozinho. */
 function mascaraMoeda(el){
   var dig=String(el.value||"").replace(/\D/g,"");
   if(!dig){el.value="";return;}
@@ -489,9 +487,7 @@ function agrupar(lista,fn,soDesp){
   return Object.keys(m).map(function(k){return [k,m[k]];}).sort(function(a,b){return b[1]-a[1];});
 }
 
-/* Os 5 cards de topo somam SOMENTE o que esta lancado na aba Lancamentos
-   no mes escolhido. Assinatura/parcela/recorrente so entram quando
-   efetivamente lancados — nada e antecipado. */
+/* Os 5 cards de topo somam SOMENTE o lancado na aba Lancamentos do mes. */
 function renderKPIs(){
   var base=filtrado();
   var desp=base.filter(function(l){return l.tipo==="Despesa";});
@@ -541,7 +537,7 @@ function renderAlerta(){
 
 function classifDe(l){
   var tab=(dados&&dados.classificacao)||{};
-  var k=String(l.descricao||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();
+  var k=chaveNorm_(l.descricao);
   return tab[k]||null;
 }
 function tipoDoItem(l){
@@ -556,6 +552,68 @@ function mesFimParcela(l){
   return Math.floor(total/12)+"-"+("0"+(total%12+1)).slice(-2);
 }
 function ymHoje(){var d=new Date();return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2);}
+
+/** Normaliza igual ao backend: minusculo, sem acento, espaco unico. */
+function chaveNorm_(s){
+  return String(s==null?"":s).toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/\s+/g," ").trim();
+}
+
+/**
+ * Compara a aba Classificacao com o que ja foi lancado no mes.
+ * Devolve os itens fixos (assinatura/recorrente/parcela) que ainda faltam.
+ */
+function faltandoNoMes(mes){
+  var tab=(dados&&dados.classificacao)||{};
+  var chaves=Object.keys(tab);
+  if(!chaves.length)return [];
+
+  var todos=todosLancamentos();
+
+  var lancado={};
+  todos.forEach(function(l){
+    if(l.tipo!=="Despesa")return;
+    if(mes!=="todos"&&String(l.mes).indexOf(mes)!==0)return;
+    lancado[chaveNorm_(l.descricao)]=1;
+  });
+
+  var grafia={};
+  todos.forEach(function(l){
+    var k=chaveNorm_(l.descricao);
+    if(!grafia[k])grafia[k]=String(l.descricao||"").trim();
+  });
+
+  var falta=[];
+  chaves.forEach(function(chaveBruta){
+    var chave=chaveNorm_(chaveBruta);
+    var c=tab[chaveBruta];
+    var t=c&&c.tipo?c.tipo:"";
+    if(t!=="Assinatura"&&t!=="Recorrente"&&t!=="Parcelado")return;
+    if(lancado[chave])return;
+
+    if(t==="Parcelado"&&c.parcelas&&c.mesInicio&&mes!=="todos"){
+      var y=+c.mesInicio.slice(0,4), m=+c.mesInicio.slice(5,7);
+      var fim=y*12+(m-1)+c.parcelas-1;
+      var alvo=+mes.slice(0,4)*12+(+mes.slice(5,7)-1);
+      if(alvo>fim)return;
+    }
+
+    var nome=grafia[chave];
+    if(!nome){
+      nome=chaveBruta.replace(/\S+/g,function(w){
+        return w.charAt(0).toUpperCase()+w.slice(1);
+      });
+    }
+    falta.push({tipo:t,nome:nome,chave:chave});
+  });
+
+  falta.sort(function(a,b){
+    var ordem={Parcelado:0,Recorrente:1,Assinatura:2};
+    return (ordem[a.tipo]-ordem[b.tipo])||a.nome.localeCompare(b.nome,"pt-BR");
+  });
+  return falta;
+}
 
 function catsReceita(){
   var m={};
@@ -663,6 +721,25 @@ function renderInsights(){
        }).join('')+'</tbody></table></div></div>';
   }
 
+  // ---- alerta de itens fixos que ainda nao foram lancados neste mes ----
+  var mesRef=i.alvo||($("dash-mes").value||"").slice(0,7)||ymHoje();
+  var pend=faltandoNoMes(mesRef);
+  if(pend.length){
+    var linhasPend=pend.map(function(p){
+      var rot=p.tipo==="Assinatura"?"Assinatura":p.tipo==="Parcelado"?"Parcela":"Recorrente";
+      return '<tr><td>'+esc(p.nome)+'</td>'+
+        '<td><span class="tag '+(p.tipo==="Parcelado"?"tag-warn":"tag-blue")+'">'+rot+'</span></td>'+
+        '<td class="num"><button class="btn-s btn-lancar-pend" data-nome="'+esc(p.nome)+'" data-tipo="'+esc(p.tipo)+'" style="padding:5px 10px;font-size:.75rem">lançar</button></td></tr>';
+    }).join("");
+    h+='<div class="card-box" style="border-color:#eab308"><div class="row-between">'+
+       '<div><h3 style="font-size:.95rem">Ainda não lançado em '+mesLabel(mesRef+"-01")+'</h3>'+
+       '<p class="muted-txt">'+pend.length+' item(ns) fixo(s) que costumam sair todo mês e não aparecem na planilha.</p></div>'+
+       '<span class="tag tag-warn">'+pend.length+'</span></div>'+
+       '<div class="tbl-wrap" style="margin-top:10px"><table class="tbl"><thead><tr>'+
+       '<th>Item</th><th>Tipo</th><th class="num">Ação</th></tr></thead><tbody>'+linhasPend+'</tbody></table></div>'+
+       '<div class="helper">Só um aviso: os cards de total continuam somando apenas o que está lançado.</div></div>';
+  }
+
   if(i.proj!==null){
     var falta=i.dias-i.dia;
     var varRestante=i.ritmo*falta;
@@ -680,6 +757,19 @@ function renderInsights(){
        ' dias que faltam. Se você gastar menos que essa média, o saldo melhora.</div></div>';
   }
   $("insights").innerHTML=h;
+
+  document.querySelectorAll(".btn-lancar-pend").forEach(function(b){
+    b.addEventListener("click",function(){
+      var nome=b.getAttribute("data-nome");
+      var tipo=b.getAttribute("data-tipo");
+      var pant=document.querySelector('[data-fin-tab="lancamento"]');
+      if(pant)pant.click();
+      var d=$("l-desc"); if(d)d.value=nome;
+      var c=$("l-classif"); if(c){c.value=tipo;c.dispatchEvent(new Event("change"));}
+      var v=$("l-valor"); if(v){v.value="";v.focus();}
+      toast("Preencha o valor e confirme","ok");
+    });
+  });
 }
 
 function svgDonut(host,grade,onClick,verdes,escopo){
