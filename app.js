@@ -79,13 +79,6 @@ function aprimorarUI(){
       });
     }
   }
-  if(!$("detalhe-filtro")){
-    var chip=$("chip-filtro");
-    if(chip&&chip.parentNode){
-      var dv=document.createElement("div");dv.id="detalhe-filtro";
-      chip.parentNode.insertBefore(dv,chip.nextSibling);
-    }
-  }
 }
 
 function lerCfg(){
@@ -633,18 +626,25 @@ function renderInsights(){
   $("insights").innerHTML=h;
 }
 
-function svgDonut(host,grade,onClick){
+/* Categorias que sao receita ficam verdes; o resto usa a paleta. */
+function catsReceita(){
+  var m={};
+  todosLancamentos().forEach(function(l){ if(l.tipo==="Receita"&&l.categoria) m[l.categoria]=1; });
+  return m;
+}
+function svgDonut(host,grade,onClick,verdes){
   var total=grade.reduce(function(a,d){return a+d[1];},0);
   if(!total){host.innerHTML='<p class="muted-txt">Sem dados para este filtro.</p>';return;}
   var size=200,r=78,cx=100,cy=100,sw=30;
   var circ=2*Math.PI*r,off=0;
+  var corDe=function(nome,i){ return (verdes&&verdes[nome]) ? "#22c55e" : CORES[i%CORES.length]; };
   var arcs=grade.map(function(d,i){
-    var frac=d[1]/total,len=frac*circ,cor=CORES[i%CORES.length];
+    var frac=d[1]/total,len=frac*circ,cor=corDe(d[0],i);
     var seg='<circle class="donut-slice" data-idx="'+i+'" cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+cor+'" stroke-width="'+sw+'" stroke-dasharray="'+len+' '+(circ-len)+'" stroke-dashoffset="'+(-off)+'" transform="rotate(-90 '+cx+' '+cy+')" style="cursor:pointer"><title>'+esc(d[0])+': '+brl(d[1])+' ('+Math.round(frac*100)+'%)</title></circle>';
     off+=len;return seg;
   }).join("");
   var leg=grade.map(function(d,i){
-    return '<button class="legend-item" data-idx="'+i+'"><span class="legend-sw" style="background:'+CORES[i%CORES.length]+'"></span><span style="flex:1">'+esc(d[0])+'</span><span class="muted-txt" style="margin:0">'+Math.round(d[1]/total*100)+'%</span></button>';
+    return '<button class="legend-item" data-idx="'+i+'"><span class="legend-sw" style="background:'+corDe(d[0],i)+'"></span><span style="flex:1">'+esc(d[0])+'</span><span class="muted-txt" style="margin:0">'+Math.round(d[1]/total*100)+'%</span></button>';
   }).join("");
   host.innerHTML='<div class="donut-wrap"><svg viewBox="0 0 '+size+' '+size+'">'+arcs+
     '<text x="'+cx+'" y="'+(cy-2)+'" text-anchor="middle" class="svg-tip" style="font-size:13px">'+brl(total)+'</text>'+
@@ -704,8 +704,9 @@ function svgLinha(host,labels,series,destaque){
 function renderGraficos(){
   var mes=$("dash-mes").value||"todos";
   var base=filtrado();
-  svgDonut($("ch-cat"),agrupar(base,function(l){return l.categoria;}),function(v){aplicarFiltro("categoria",v);});
-  svgDonut($("ch-sub"),agrupar(base,function(l){return l.subcategoria;}).slice(0,8),function(v){aplicarFiltro("sub",v);});
+  var verdes=catsReceita();
+  svgDonut($("ch-cat"),agrupar(base,function(l){return l.categoria;}),function(v){aplicarFiltro("categoria",v,"ch-cat");},verdes);
+  svgDonut($("ch-sub"),agrupar(base,function(l){return l.subcategoria;}).slice(0,8),function(v){aplicarFiltro("sub",v,"ch-sub");},verdes);
 
   var cats={};
   base.forEach(function(l){if(l.tipo==="Despesa")cats[l.categoria]=1;});
@@ -718,7 +719,7 @@ function renderGraficos(){
   });
   svgEmpilhadas($("ch-stack"),lista,cred,deb);
 
-  svgDonut($("ch-forma"),agrupar(base,function(l){return l.forma;}),function(v){aplicarFiltro("forma",v);});
+  svgDonut($("ch-forma"),agrupar(base,function(l){return l.forma;}),function(v){aplicarFiltro("forma",v,"ch-forma");});
 
   var cart=agrupar(base.filter(function(l){return l.forma==="Cartão de Crédito"&&l.cartao;}),function(l){return l.cartao;},false);
   if(cart.length)svgBarras($("ch-cartao"),cart.map(function(c){return c[0];}),cart.map(function(c){return c[1];}),"#3b82f6");
@@ -749,38 +750,46 @@ function renderConferencia(){
   $("conf-mes").innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mês</th><th class="num">Qtd</th><th class="num">Despesas</th><th class="num">Receitas</th><th class="num">Saldo</th></tr></thead><tbody>'+linhas+'</tbody></table></div>';
 }
 
+/* Detalhe do donut: aparece DENTRO do card do grafico clicado, nao no topo. */
 function renderChip(){
-  var h=$("chip-filtro"), det=$("detalhe-filtro");
-  if(!filtroDash.tipo){h.innerHTML="";if(det)det.innerHTML="";return;}
+  var h=$("chip-filtro");
+  var antigos=document.querySelectorAll(".detalhe-inline");
+  for(var k=0;k<antigos.length;k++)antigos[k].remove();
+
+  if(!filtroDash.tipo){h.innerHTML="";return;}
   var rot=filtroDash.tipo==="categoria"?"Categoria":filtroDash.tipo==="forma"?"Forma":"Subcategoria";
   h.innerHTML='<span class="tag tag-blue">'+rot+': '+esc(filtroDash.valor)+'</span>';
-  if(!det)return;
+
+  var host=filtroDash.onde?$(filtroDash.onde):null;
+  if(!host)return;
+  var card=host.closest(".card-box")||host.parentNode;
 
   var lista=filtrado().slice().sort(function(a,b){return b.valor-a.valor;});
   var total=soma(lista,"valor");
   var linhas=lista.map(function(l){
     return '<tr><td>'+isoParaBR(l.data)+'</td><td>'+esc(l.descricao)+'</td>'+
       '<td>'+esc(l.subcategoria)+'</td><td>'+esc(l.forma)+(l.cartao?' · '+esc(l.cartao):'')+'</td>'+
-      '<td class="num neg">'+brl(l.valor)+'</td></tr>';
+      '<td class="num '+(l.tipo==="Receita"?"pos":"neg")+'">'+brl(l.valor)+'</td></tr>';
   }).join("");
 
-  det.innerHTML='<div class="card-box" style="border-color:var(--accent);margin-top:12px">'+
-    '<div class="row-between"><div><h3 style="font-size:.95rem">'+esc(filtroDash.valor)+'</h3>'+
-    '<p class="muted-txt">'+lista.length+' lançamento(s) · '+brl(total)+'</p></div>'+
-    '<button class="btn-p" id="btn-voltar-grafico" style="padding:9px 14px;font-size:.85rem">✕ Ver gráfico completo</button></div>'+
-    '<div class="tbl-wrap" style="margin-top:12px"><table class="tbl"><thead><tr>'+
+  var box=document.createElement("div");
+  box.className="detalhe-inline";
+  box.innerHTML='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--accent)">'+
+    '<div class="row-between"><div><strong style="font-size:.92rem">'+esc(filtroDash.valor)+'</strong>'+
+    '<p class="muted-txt" style="margin:2px 0 0">'+lista.length+' lançamento(s) · '+brl(total)+'</p></div>'+
+    '<button class="btn-p" id="btn-voltar-grafico" style="padding:8px 12px;font-size:.8rem">✕ Ver gráfico completo</button></div>'+
+    '<div class="tbl-wrap" style="margin-top:10px"><table class="tbl"><thead><tr>'+
     '<th>Data</th><th>Descrição</th><th>Subcategoria</th><th>Pagamento</th><th class="num">Valor</th>'+
     '</tr></thead><tbody>'+linhas+'</tbody></table></div></div>';
-
-  det.querySelector("#btn-voltar-grafico").addEventListener("click",limparFiltro);
+  card.appendChild(box);
+  box.querySelector("#btn-voltar-grafico").addEventListener("click",limparFiltro);
+  setTimeout(function(){box.scrollIntoView({behavior:"smooth",block:"center"});},60);
 }
-function aplicarFiltro(tipo,valor){
-  filtroDash={tipo:tipo,valor:valor};
+function aplicarFiltro(tipo,valor,onde){
+  filtroDash={tipo:tipo,valor:valor,onde:onde||null};
   renderDashboard();
-  var det=$("detalhe-filtro");
-  if(det&&det.firstChild)det.scrollIntoView({behavior:"smooth",block:"start"});
 }
-function limparFiltro(){filtroDash={tipo:null,valor:null};renderDashboard();}
+function limparFiltro(){filtroDash={tipo:null,valor:null,onde:null};renderDashboard();}
 function renderDashboard(){
   if(!dados)return;
   renderAlerta();
