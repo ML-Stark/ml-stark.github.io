@@ -52,6 +52,11 @@ if(!document.getElementById("css-acabamento")){
 var lk=document.createElement("link");
 lk.id="css-acabamento";lk.rel="stylesheet";lk.href="fix.css";
 document.head.appendChild(lk);
+if(!document.getElementById("js-ordem")){
+var sc=document.createElement("script");
+sc.id="js-ordem";sc.src="ordem.js";sc.async=true;
+document.head.appendChild(sc);
+}
 var st=document.createElement("style");
 st.textContent=
 ".conf-desktop{display:block}.conf-mobile{display:none}"+
@@ -916,7 +921,8 @@ box.innerHTML='<div style="margin-top:14px;padding-top:14px;border-top:1px solid
 '<div class="row-between"><div><strong style="font-size:.92rem">'+esc(filtroDash.valor)+'</strong>'+
 '<p class="muted-txt" style="margin:2px 0 0">'+lista.length+' lançamento(s) · '+brl(total)+'</p></div>'+
 '<button class="btn-p" id="btn-voltar-grafico" style="padding:8px 12px;font-size:.8rem">✕ Ver gráfico completo</button></div>'+
-'<div class="tbl-wrap" style="margin-top:10px"><table class="tbl"><thead><tr>'+
+'<div class="helper" style="margin-top:8px">Toque no título de uma coluna para ordenar; toque de novo para inverter.</div>'+
+'<div class="tbl-wrap" style="margin-top:8px"><table class="tbl"><thead><tr>'+
 '<th>Data</th><th>Descrição</th><th>Subcategoria</th><th>Pagamento</th><th class="num">Valor</th>'+
 '</tr></thead><tbody>'+linhas+'</tbody></table></div></div>';
 card.appendChild(box);
@@ -1077,7 +1083,7 @@ var linhas=[
 ["Itens classificados",dados?Object.keys(dados.classificacao||{}).length:"—"],
 ["Categorias",dados?Object.keys(dados.categorias||{}).length:"—"],
 ["Cartões",dados?((dados.cartoes||[]).length):"—"],
-["Versão da API",dados?esc(dados.versao||"—"):"—"],
+["Versão da API",dados?(esc(dados.versao||"—")+(String(dados.versao||"")<"2.1"?' <span class="neg">· desatualizada</span>':'')):"—"],
 ["Última leitura",ultimaLeitura?ultimaLeitura.toLocaleString("pt-BR"):"—"]
 ];
 $("diag-corpo").innerHTML=linhas.map(function(l){
@@ -1242,7 +1248,12 @@ novo=String(novo).trim();
 if(!novo||novo===atual)return;
 chamarPOST({acao:"renomearUsuario",token:cfg.token,usuario:atual,novoUsuario:novo})
 .then(function(r){
-if(!r.ok)throw new Error(r.erro||"Falha ao renomear.");
+if(!r.ok){
+if(String(r.erro||"").indexOf("desconhecida")>-1){
+throw new Error("O servidor está numa versão antiga. Cole a API v2.1 no Apps Script e reimplante (Implantar → Gerenciar implantações → lápis → Nova versão).");
+}
+throw new Error(r.erro||"Falha ao renomear.");
+}
 var q=r.mudou||{};
 var msg=novo+" entrou no lugar de "+atual+"."+
 (q.lancamentos?" "+q.lancamentos+" lançamento(s) migraram.":"")+
