@@ -21,13 +21,31 @@ function isoParaBR(iso){if(!iso)return "—";var p=String(iso).split("-");return
 function hojeISO(){var d=new Date();return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);}
 function mesDe(iso){return iso?iso.slice(0,7)+"-01":"";}
 function mesLabel(ym){if(!ym)return "—";var p=ym.split("-");return MESES[+p[1]-1]+"/"+p[0];}
-function parseValor(txt){
-  var s=String(txt==null?"":txt).replace(/R\$/gi,"").replace(/\s/g,"");
-  if(!s)return NaN;
-  if(s.indexOf(",")>-1&&s.indexOf(".")>-1)s=s.replace(/\./g,"").replace(",",".");
-  else s=s.replace(",",".");
-  var n=Number(s);return isFinite(n)?n:NaN;
+
+/* ---------------- Mascara de moeda ----------------
+   Digita-se apenas digitos; o campo formata sozinho (1.234,56).
+   Os dois ultimos digitos sao os centavos. */
+function mascaraMoeda(el){
+  var dig=String(el.value||"").replace(/\D/g,"");
+  if(!dig){el.value="";return;}
+  dig=dig.replace(/^0+/,"")||"0";
+  while(dig.length<3)dig="0"+dig;
+  var cent=dig.slice(-2), inteiro=dig.slice(0,-2);
+  inteiro=inteiro.replace(/\B(?=(\d{3})+(?!\d))/g,".");
+  el.value=inteiro+","+cent;
 }
+function valorDoCampo(id){
+  var el=$(id);
+  if(!el)return 0;
+  var t=String(el.value||"").replace(/\./g,"").replace(",",".");
+  var n=Number(t);
+  return isFinite(n)?n:0;
+}
+function paraCampo(v){
+  var n=Number(v)||0;
+  return n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
 function toast(msg,tipo){
   var el=document.createElement("div");
   el.textContent=msg;
@@ -228,7 +246,7 @@ function setTipo(t){
 
 function validarForm(){
   var desc=$("l-desc").value.trim();
-  var valor=parseValor($("l-valor").value);
+  var valor=valorDoCampo("l-valor");
   var data=$("l-data").value;
   var cat=$("l-cat").value, sub=$("l-sub").value, forma=$("l-forma").value, cartao=$("l-cartao").value;
   if(!(valor>0))return "Informe um valor maior que zero (ex.: 42,90).";
@@ -254,7 +272,7 @@ function lancar(e){
     descricao:$("l-desc").value.trim(),
     categoria:$("l-cat").value,
     subcategoria:$("l-sub").value,
-    valor:parseValor($("l-valor").value),
+    valor:valorDoCampo("l-valor"),
     tipo:$("l-cat").value==="Renda"?"receita":tipoAtual,
     forma:forma,
     cartao:forma==="Cartão de Crédito"?$("l-cartao").value:""
@@ -371,7 +389,7 @@ function abrirEditar(linha){
   if(!l){toast("Lançamento não encontrado. Atualize.","erro");return;}
   editando=l;
   $("e-data").value=l.data;
-  $("e-valor").value=String(l.valor).replace(".",",");
+  $("e-valor").value=paraCampo(l.valor);
   $("e-desc").value=l.descricao;
   $("e-cat").value=l.categoria;
   preencherSubs("e-cat","e-sub");
@@ -390,7 +408,7 @@ function salvarEdicao(e){
   e.preventDefault();
   if(!editando)return;
   var box=$("editar-erro");
-  var valor=parseValor($("e-valor").value);
+  var valor=valorDoCampo("e-valor");
   if(!(valor>0)){box.textContent="Valor inválido.";box.classList.remove("hidden");return;}
   var forma=$("e-forma").value;
   if(forma==="Cartão de Crédito"&&!$("e-cartao").value){
@@ -471,6 +489,9 @@ function agrupar(lista,fn,soDesp){
   return Object.keys(m).map(function(k){return [k,m[k]];}).sort(function(a,b){return b[1]-a[1];});
 }
 
+/* Os 5 cards de topo somam SOMENTE o que esta lancado na aba Lancamentos
+   no mes escolhido. Assinatura/parcela/recorrente so entram quando
+   efetivamente lancados — nada e antecipado. */
 function renderKPIs(){
   var base=filtrado();
   var desp=base.filter(function(l){return l.tipo==="Despesa";});
@@ -523,7 +544,6 @@ function classifDe(l){
   var k=String(l.descricao||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();
   return tab[k]||null;
 }
-/** Tipo declarado na aba Classificacao ('' = nao classificado). */
 function tipoDoItem(l){
   var c=classifDe(l);
   return (c&&c.tipo)?c.tipo:"";
@@ -537,14 +557,12 @@ function mesFimParcela(l){
 }
 function ymHoje(){var d=new Date();return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2);}
 
-/** Categorias usadas em lancamentos de RECEITA. */
 function catsReceita(){
   var m={};
   todosLancamentos().forEach(function(l){ if(l.tipo==="Receita"&&l.categoria) m[l.categoria]=1; });
   return m;
 }
 
-/** Media diaria de gasto variavel nos meses FECHADOS. */
 function ritmoVariavel(){
   var todos=todosLancamentos().filter(function(l){return l.tipo==="Despesa";});
   var porMes={};
@@ -741,7 +759,6 @@ function renderGraficos(){
   var rec=base.filter(function(l){return l.tipo==="Receita";});
   var verdes=catsReceita();
 
-  // Despesa e receita em donuts SEPARADOS: nunca somam.
   svgDonut($("ch-cat"),agrupar(desp,function(l){return l.categoria;}),function(v){aplicarFiltro("categoria",v,"ch-cat");},null,"Despesas");
   svgDonut($("ch-sub"),agrupar(desp,function(l){return l.subcategoria;}).slice(0,8),function(v){aplicarFiltro("sub",v,"ch-sub");},null,"Despesas");
   svgDonut($("ch-forma"),agrupar(desp,function(l){return l.forma;}),function(v){aplicarFiltro("forma",v,"ch-forma");},null,"Despesas");
@@ -1063,7 +1080,14 @@ function bind(){
   ["l-data","l-forma","l-cartao"].forEach(function(id){$(id).addEventListener("change",atualizarAuto);});
   $("l-data").addEventListener("input",atualizarAuto);
   $("form-lanc").addEventListener("submit",lancar);
-  $("l-valor").addEventListener("input",function(){$("lanc-erro").classList.add("hidden");});
+
+  ["l-valor","e-valor"].forEach(function(id){
+    var el=$(id); if(!el)return;
+    el.setAttribute("inputmode","numeric");
+    if(id==="l-valor")el.setAttribute("placeholder","digite só números");
+    el.addEventListener("input",function(){mascaraMoeda(el);$("lanc-erro").classList.add("hidden");});
+    el.addEventListener("blur",function(){if(el.value)mascaraMoeda(el);});
+  });
 
   $("h-mes").addEventListener("change",renderHistorico);
   $("h-busca").addEventListener("input",renderHistorico);
