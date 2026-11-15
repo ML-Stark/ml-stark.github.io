@@ -1,18 +1,16 @@
 (function(){
 "use strict";
-
 var LS_URL="mls_url", LS_TOKEN="mls_token", LS_USER="mls_user", LS_SESSAO="mls_sessao";
+var LS_PAPEL="mls_papel", LS_NOME="mls_nome";
 var URL_PADRAO="https://script.google.com/macros/s/AKfycbxnLUkA6dyn1I51wkVZUNeSTM3K_VTNqxUPIxxNGGI0T5wqnJum5vmNb6phziPqjno/exec";
 var MESES=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 var CORES=["#3b82f6","#22c55e","#ef4444","#eab308","#a855f7","#06b6d4","#f97316","#ec4899","#84cc16","#64748b"];
-
-var cfg={url:"",token:"",usuario:"maik"};
+var cfg={url:"",token:"",usuario:"",papel:"comum",nome:""};
 var dados=null;
 var tipoAtual="despesa";
 var filtroDash={tipo:null,valor:null};
 var editando=null;
 var ultimaLeitura=null;
-
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 function brl(v){return "R$ "+(Number(v)||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -21,8 +19,6 @@ function isoParaBR(iso){if(!iso)return "—";var p=String(iso).split("-");return
 function hojeISO(){var d=new Date();return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);}
 function mesDe(iso){return iso?iso.slice(0,7)+"-01":"";}
 function mesLabel(ym){if(!ym)return "—";var p=ym.split("-");return MESES[+p[1]-1]+"/"+p[0];}
-
-/* Mascara de moeda: digita-se apenas digitos; formata 1.234,56 sozinho. */
 function mascaraMoeda(el){
   var dig=String(el.value||"").replace(/\D/g,"");
   if(!dig){el.value="";return;}
@@ -43,7 +39,6 @@ function paraCampo(v){
   var n=Number(v)||0;
   return n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
-
 function toast(msg,tipo){
   var el=document.createElement("div");
   el.textContent=msg;
@@ -52,7 +47,6 @@ function toast(msg,tipo){
   document.body.appendChild(el);
   setTimeout(function(){el.style.transition="opacity .3s";el.style.opacity="0";setTimeout(function(){el.remove();},320);},2600);
 }
-
 function aprimorarUI(){
   if(!document.getElementById("css-acabamento")){
     var lk=document.createElement("link");
@@ -67,7 +61,6 @@ function aprimorarUI(){
   });
   var hubKpi=document.querySelector("#view-hub .grid-kpi");
   if(hubKpi)hubKpi.remove();
-
   var grade=document.querySelector("#fin-dashboard .grid-charts");
   if(grade&&!$("ch-rec")){
     var t=document.querySelectorAll("#fin-dashboard .grid-charts .card-box h3");
@@ -79,7 +72,17 @@ function aprimorarUI(){
     cardRec.innerHTML='<h3 style="font-size:.95rem">Receitas por categoria</h3><div id="ch-rec" style="margin-top:12px"></div>';
     grade.insertBefore(cardRec,grade.children[1]||null);
   }
-
+  var tUser=$("s-user"), tTok=$("s-token");
+  if(tUser&&tUser.closest("div")){tUser.closest("div").style.display="none";}
+  if(tTok&&tTok.closest("div")){tTok.closest("div").style.display="none";}
+  var avisoSetup=$("setup-aviso");
+  if(avisoSetup){
+    avisoSetup.innerHTML='<b>Primeira configuração.</b> Cole a URL do seu servidor (termina em <code>/exec</code>). '+
+      'Depois é só entrar com seu usuário e senha.';
+    avisoSetup.className="notice-info";
+  }
+  var loginSub=document.querySelector("#form-login .login-sub");
+  if(loginSub)loginSub.textContent="Entre com seu usuário e senha";
   if(!$("wrap-classif")&&$("l-forma")){
     var fs=$("l-forma");
     var bloco=fs.closest(".grid-2");
@@ -108,12 +111,13 @@ function aprimorarUI(){
     }
   }
 }
-
 function lerCfg(){
   try{
     cfg.url=(localStorage.getItem(LS_URL)||URL_PADRAO||"").trim();
     cfg.token=(localStorage.getItem(LS_TOKEN)||"").trim();
-    cfg.usuario=(localStorage.getItem(LS_USER)||"maik").trim();
+    cfg.usuario=(localStorage.getItem(LS_USER)||"").trim();
+    cfg.papel=(localStorage.getItem(LS_PAPEL)||"comum");
+    cfg.nome=(localStorage.getItem(LS_NOME)||"").trim();
   }catch(e){}
 }
 function gravarCfg(){
@@ -121,6 +125,8 @@ function gravarCfg(){
     localStorage.setItem(LS_URL,cfg.url);
     localStorage.setItem(LS_TOKEN,cfg.token);
     localStorage.setItem(LS_USER,cfg.usuario);
+    localStorage.setItem(LS_PAPEL,cfg.papel||"comum");
+    localStorage.setItem(LS_NOME,cfg.nome||"");
   }catch(e){}
 }
 function configurado(){return !!(cfg.url&&cfg.token);}
@@ -130,7 +136,6 @@ function urlValida(u){
   if(/localhost|127\.0\.0\.1/.test(u))return true;
   return /^https:\/\/[^\s]+\/exec\/?$/i.test(u.trim());
 }
-
 function urlCom(params){
   var q=[];
   for(var k in params){if(params.hasOwnProperty(k))q.push(encodeURIComponent(k)+"="+encodeURIComponent(params[k]));}
@@ -171,27 +176,33 @@ function chamarPOST(corpo){
     try{return JSON.parse(txt);}catch(e){throw new Error("Resposta inválida da planilha.");}
   });
 }
-
-function carregar(silencioso){
-  if(!configurado())return Promise.reject(new Error("Configure a conexão primeiro."));
-  if(!silencioso)setHub("Lendo a planilha…");
+function carregarDados(){
   return chamarGET({acao:"ler",token:cfg.token}).then(function(j){
     if(!j.ok){
-      if(j.erro==="token")throw new Error("Senha (token) recusada pela planilha.");
+      if(j.erro==="sessao")throw new Error("Sua sessão expirou. Entre novamente.");
       throw new Error(j.erro||"Falha ao ler a planilha.");
     }
     dados=j;
     ultimaLeitura=new Date();
+    cfg.papel=j.papel||cfg.papel;
+    cfg.nome=j.nome||cfg.nome;
+    gravarCfg();
     aplicarDicionario();
     preencherOpcoes();
     renderHub();
+    return j;
+  });
+}
+function carregar(silencioso){
+  if(!configurado())return Promise.reject(new Error("Configure a conexão primeiro."));
+  if(!silencioso)setHub("Lendo a planilha…");
+  return carregarDados().then(function(j){
     if(!$("fin-dashboard").classList.contains("hidden"))renderDashboard();
     if(!$("fin-historico").classList.contains("hidden"))renderHistorico();
     return j;
   });
 }
 function setHub(txt){var e=$("hub-status");if(e)e.textContent=txt;}
-
 function aplicarDicionario(){
   var cats=dados&&dados.categorias?dados.categorias:{};
   var nomes=Object.keys(cats);
@@ -217,7 +228,6 @@ function preencherSubs(catId,subId){
   var subs=subsDe(cat);
   $(subId).innerHTML=subs.map(function(s){return '<option value="'+esc(s)+'">'+esc(s)+'</option>';}).join("");
 }
-
 function bancoDoCartao(nome){
   var cartoes=(dados&&dados.cartoes)||[];
   for(var i=0;i<cartoes.length;i++){if(cartoes[i].nome===nome)return cartoes[i].banco||"";}
@@ -241,7 +251,6 @@ function setTipo(t){
   $("t-rec").setAttribute("aria-pressed",t==="receita");
   atualizarAuto();
 }
-
 function validarForm(){
   var desc=$("l-desc").value.trim();
   var valor=valorDoCampo("l-valor");
@@ -263,7 +272,6 @@ function lancar(e){
   ok.classList.add("hidden");
   if(erro){box.textContent=erro;box.classList.remove("hidden");return;}
   box.classList.add("hidden");
-
   var forma=$("l-forma").value;
   var item={
     data:$("l-data").value,
@@ -275,21 +283,18 @@ function lancar(e){
     forma:forma,
     cartao:forma==="Cartão de Crédito"?$("l-cartao").value:""
   };
-
   var tipoC=$("l-classif")?$("l-classif").value:"";
   if(tipoC){
     item.classif={tipo:tipoC,
       parcelas:tipoC==="Parcelado"?(Number($("l-parcelas").value)||0):0,
       mesInicio:tipoC==="Parcelado"?String(item.data).slice(0,7):""};
   }
-
   var btn=$("btn-lancar");
   btn.disabled=true;
   btn.innerHTML='<span class="spinner"></span> Gravando…';
-
-  chamarPOST({token:cfg.token,acao:"lancar",usuario:cfg.usuario,itens:[item]})
+  chamarPOST({token:cfg.token,acao:"lancar",itens:[item]})
     .then(function(j){
-      if(!j.ok)throw new Error(j.erro==="token"?"Senha recusada.":(j.erro||"Falha ao gravar."));
+      if(!j.ok)throw new Error(j.erro||"Falha ao gravar.");
       var r=(j.resultados&&j.resultados[0])||{status:"?"};
       if(r.status==="duplicado"){
         ok.textContent="Este lançamento já existe na planilha (linha "+r.linha+"). Nada foi duplicado.";
@@ -321,14 +326,12 @@ function lancar(e){
       btn.textContent="Lançar na planilha";
     });
 }
-
 function preencherOpcoes(){
   var meses=mesesDisponiveis();
   var sel=$("dash-mes");
   var atual=sel.value||"todos";
   sel.innerHTML='<option value="todos">Todos</option>'+meses.map(function(m){return '<option value="'+m+'">'+mesLabel(m)+'</option>';}).join("");
   sel.value=(atual==="todos"||meses.indexOf(atual)>-1)?atual:"todos";
-
   var hsel=$("h-mes");
   var hatual=hsel.value||"todos";
   hsel.innerHTML='<option value="todos">Todos</option>'+meses.map(function(m){return '<option value="'+m+'">'+mesLabel(m)+'</option>';}).join("");
@@ -381,7 +384,6 @@ function acharLinha(linha){
   for(var i=0;i<t.length;i++){if(String(t[i].linha)===String(linha))return t[i];}
   return null;
 }
-
 function abrirEditar(linha){
   var l=acharLinha(linha);
   if(!l){toast("Lançamento não encontrado. Atualize.","erro");return;}
@@ -415,7 +417,7 @@ function salvarEdicao(e){
   var btn=$("btn-salvar-edit");
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Salvando…';
   chamarPOST({
-    token:cfg.token,acao:"atualizar",usuario:cfg.usuario,
+    token:cfg.token,acao:"atualizar",
     linha:editando.linha,assinatura:assinaturaDe(editando),
     item:{
       data:$("e-data").value,descricao:$("e-desc").value.trim(),
@@ -434,7 +436,6 @@ function salvarEdicao(e){
     btn.disabled=false;btn.textContent="Salvar na planilha";
   });
 }
-
 function abrirExcluir(linha){
   var l=acharLinha(linha);
   if(!l){toast("Lançamento não encontrado. Atualize.","erro");return;}
@@ -448,7 +449,7 @@ function confirmarExclusao(){
   var btn=$("btn-confirmar-exc");
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Apagando…';
   chamarPOST({
-    token:cfg.token,acao:"excluir",usuario:cfg.usuario,
+    token:cfg.token,acao:"excluir",
     linha:$("exc-linha").value,assinatura:$("exc-assinatura").value
   }).then(function(j){
     if(!j.ok)throw new Error(j.erro||"Falha ao excluir.");
@@ -462,7 +463,6 @@ function confirmarExclusao(){
     btn.disabled=false;btn.textContent="Apagar da planilha";
   });
 }
-
 function baseMes(mes){
   var t=todosLancamentos();
   return mes==="todos"?t:t.filter(function(l){return String(l.mes).indexOf(mes)===0;});
@@ -486,8 +486,6 @@ function agrupar(lista,fn,soDesp){
   });
   return Object.keys(m).map(function(k){return [k,m[k]];}).sort(function(a,b){return b[1]-a[1];});
 }
-
-/* Os 5 cards de topo somam SOMENTE o lancado na aba Lancamentos do mes. */
 function renderKPIs(){
   var base=filtrado();
   var desp=base.filter(function(l){return l.tipo==="Despesa";});
@@ -515,7 +513,6 @@ function renderKPIs(){
 function kpi(lbl,val,cls,cap){
   return '<div class="kpi-card"><div class="lbl">'+lbl+'</div><div class="val '+cls+'">'+val+'</div><div class="cap">'+cap+'</div></div>';
 }
-
 function renderAlerta(){
   var mes=$("dash-mes").value||"todos";
   var alvo=$("dash-alerta");
@@ -534,7 +531,6 @@ function renderAlerta(){
   }
   alvo.innerHTML=h;
 }
-
 function classifDe(l){
   var tab=(dados&&dados.classificacao)||{};
   var k=chaveNorm_(l.descricao);
@@ -552,38 +548,27 @@ function mesFimParcela(l){
   return Math.floor(total/12)+"-"+("0"+(total%12+1)).slice(-2);
 }
 function ymHoje(){var d=new Date();return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2);}
-
-/** Normaliza igual ao backend: minusculo, sem acento, espaco unico. */
 function chaveNorm_(s){
   return String(s==null?"":s).toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
     .replace(/\s+/g," ").trim();
 }
-
-/**
- * Compara a aba Classificacao com o que ja foi lancado no mes.
- * Devolve os itens fixos (assinatura/recorrente/parcela) que ainda faltam.
- */
 function faltandoNoMes(mes){
   var tab=(dados&&dados.classificacao)||{};
   var chaves=Object.keys(tab);
   if(!chaves.length)return [];
-
   var todos=todosLancamentos();
-
   var lancado={};
   todos.forEach(function(l){
     if(l.tipo!=="Despesa")return;
     if(mes!=="todos"&&String(l.mes).indexOf(mes)!==0)return;
     lancado[chaveNorm_(l.descricao)]=1;
   });
-
   var grafia={};
   todos.forEach(function(l){
     var k=chaveNorm_(l.descricao);
     if(!grafia[k])grafia[k]=String(l.descricao||"").trim();
   });
-
   var falta=[];
   chaves.forEach(function(chaveBruta){
     var chave=chaveNorm_(chaveBruta);
@@ -591,14 +576,12 @@ function faltandoNoMes(mes){
     var t=c&&c.tipo?c.tipo:"";
     if(t!=="Assinatura"&&t!=="Recorrente"&&t!=="Parcelado")return;
     if(lancado[chave])return;
-
     if(t==="Parcelado"&&c.parcelas&&c.mesInicio&&mes!=="todos"){
       var y=+c.mesInicio.slice(0,4), m=+c.mesInicio.slice(5,7);
       var fim=y*12+(m-1)+c.parcelas-1;
       var alvo=+mes.slice(0,4)*12+(+mes.slice(5,7)-1);
       if(alvo>fim)return;
     }
-
     var nome=grafia[chave];
     if(!nome){
       nome=chaveBruta.replace(/\S+/g,function(w){
@@ -607,20 +590,17 @@ function faltandoNoMes(mes){
     }
     falta.push({tipo:t,nome:nome,chave:chave});
   });
-
   falta.sort(function(a,b){
     var ordem={Parcelado:0,Recorrente:1,Assinatura:2};
     return (ordem[a.tipo]-ordem[b.tipo])||a.nome.localeCompare(b.nome,"pt-BR");
   });
   return falta;
 }
-
 function catsReceita(){
   var m={};
   todosLancamentos().forEach(function(l){ if(l.tipo==="Receita"&&l.categoria) m[l.categoria]=1; });
   return m;
 }
-
 function ritmoVariavel(){
   var todos=todosLancamentos().filter(function(l){return l.tipo==="Despesa";});
   var porMes={};
@@ -643,7 +623,6 @@ function ritmoVariavel(){
   if(!taxas.length)return 0;
   return taxas.reduce(function(a,b){return a+b;},0)/taxas.length;
 }
-
 function insightsDe(mes){
   var todos=todosLancamentos();
   var desp=todos.filter(function(l){return l.tipo==="Despesa";});
@@ -655,11 +634,9 @@ function insightsDe(mes){
   var vazio={assinatura:0,parcelado:0,recorrente:0,variavel:0,lancado:0,
              proj:null,fixoPago:0,varPago:0,receita:0,lista:[],alvo:"",ritmo:0,dia:1,dias:30};
   if(!alvo)return vazio;
-
   var doMes=desp.filter(function(l){return String(l.mes).indexOf(alvo)===0;});
   var assinatura=0, parcelado=0, recorrente=0, variavel=0, lancado=0;
   var parcelasAtivas={};
-
   doMes.forEach(function(l){
     var t=tipoDoItem(l);
     var v=Number(l.valor)||0;
@@ -672,12 +649,10 @@ function insightsDe(mes){
     else if(t==="Recorrente")recorrente+=v;
     else variavel+=v;
   });
-
   var anoAlvo=alvo.slice(0,7);
   var fixoPago=assinatura+recorrente+parcelado;
   var receita=soma(todos.filter(function(l){return l.tipo==="Receita"&&String(l.mes).indexOf(alvo)===0;}),"valor");
   var proj=null, ritmo=0, dia=1, diasNoMes=30;
-
   if(anoAlvo===ymHoje()){
     var d=new Date();
     dia=d.getDate();
@@ -685,21 +660,17 @@ function insightsDe(mes){
     ritmo=ritmoVariavel();
     proj=Math.round((receita-fixoPago-variavel-ritmo*(diasNoMes-dia))*100)/100;
   }
-
   var lista=[];
   for(var n in parcelasAtivas){
     lista.push({nome:n,valor:parcelasAtivas[n].valor,fim:parcelasAtivas[n].fim});
   }
   lista.sort(function(a,b){return b.valor-a.valor;});
-
   return {assinatura:assinatura,parcelado:parcelado,recorrente:recorrente,variavel:variavel,
           lancado:lancado,proj:proj,fixoPago:fixoPago,varPago:variavel,receita:receita,
           lista:lista,alvo:anoAlvo,ritmo:ritmo,dia:dia,dias:diasNoMes};
 }
-
 function renderInsights(){
   var i=insightsDe($("dash-mes").value||"todos");
-
   var cards=[
     ["Assinaturas",brl(i.assinatura),"por mês · "+brl(i.assinatura*12)+"/ano","#a855f7"],
     ["Parcelado",brl(i.parcelado),i.lista.length?i.lista.length+" parcela(s) ativa(s)":"—","#f97316"],
@@ -709,7 +680,6 @@ function renderInsights(){
   var h='<div class="grid-kpi">'+cards.map(function(c){
     return '<div class="kpi-card"><div class="lbl">'+c[0]+'</div><div class="val" style="color:'+c[3]+'">'+c[1]+'</div><div class="cap">'+c[2]+'</div></div>';
   }).join("")+'</div>';
-
   if(i.lista.length){
     h+='<div class="card-box"><div class="row-between"><h3 style="font-size:.95rem">Parcelas ativas</h3>'+
        '<span class="tag tag-blue">'+brl(i.parcelado)+'/mês</span></div>'+
@@ -720,8 +690,6 @@ function renderInsights(){
          return '<tr><td>'+esc(p.nome)+'</td><td class="num">'+brl(p.valor)+'</td><td>'+fim+'</td></tr>';
        }).join('')+'</tbody></table></div></div>';
   }
-
-  // ---- alerta de itens fixos que ainda nao foram lancados neste mes ----
   var mesRef=i.alvo||($("dash-mes").value||"").slice(0,7)||ymHoje();
   var pend=faltandoNoMes(mesRef);
   if(pend.length){
@@ -739,7 +707,6 @@ function renderInsights(){
        '<th>Item</th><th>Tipo</th><th class="num">Ação</th></tr></thead><tbody>'+linhasPend+'</tbody></table></div>'+
        '<div class="helper">Só um aviso: os cards de total continuam somando apenas o que está lançado.</div></div>';
   }
-
   if(i.proj!==null){
     var falta=i.dias-i.dia;
     var varRestante=i.ritmo*falta;
@@ -757,7 +724,6 @@ function renderInsights(){
        ' dias que faltam. Se você gastar menos que essa média, o saldo melhora.</div></div>';
   }
   $("insights").innerHTML=h;
-
   document.querySelectorAll(".btn-lancar-pend").forEach(function(b){
     b.addEventListener("click",function(){
       var nome=b.getAttribute("data-nome");
@@ -771,7 +737,6 @@ function renderInsights(){
     });
   });
 }
-
 function svgDonut(host,grade,onClick,verdes,escopo){
   var total=grade.reduce(function(a,d){return a+d[1];},0);
   if(!total){host.innerHTML='<p class="muted-txt">Sem dados para este filtro.</p>';return;}
@@ -848,12 +813,10 @@ function renderGraficos(){
   var desp=base.filter(function(l){return l.tipo==="Despesa";});
   var rec=base.filter(function(l){return l.tipo==="Receita";});
   var verdes=catsReceita();
-
   svgDonut($("ch-cat"),agrupar(desp,function(l){return l.categoria;}),function(v){aplicarFiltro("categoria",v,"ch-cat");},null,"Despesas");
   svgDonut($("ch-sub"),agrupar(desp,function(l){return l.subcategoria;}).slice(0,8),function(v){aplicarFiltro("sub",v,"ch-sub");},null,"Despesas");
   svgDonut($("ch-forma"),agrupar(desp,function(l){return l.forma;}),function(v){aplicarFiltro("forma",v,"ch-forma");},null,"Despesas");
   if($("ch-rec"))svgDonut($("ch-rec"),agrupar(rec,function(l){return l.categoria;}),function(v){aplicarFiltro("categoria",v,"ch-rec");},verdes,"Receitas");
-
   var cats={};
   desp.forEach(function(l){cats[l.categoria]=1;});
   var lista=Object.keys(cats).sort();
@@ -864,11 +827,9 @@ function renderGraficos(){
     return soma(desp.filter(function(l){return l.categoria===c&&l.forma!=="Cartão de Crédito";}),"valor");
   });
   svgEmpilhadas($("ch-stack"),lista,cred,deb);
-
   var cart=agrupar(desp.filter(function(l){return l.forma==="Cartão de Crédito"&&l.cartao;}),function(l){return l.cartao;},false);
   if(cart.length)svgBarras($("ch-cartao"),cart.map(function(c){return c[0];}),cart.map(function(c){return c[1];}),"#3b82f6");
   else $("ch-cartao").innerHTML='<p class="muted-txt">Nenhuma fatura de crédito no período.</p>';
-
   var ms=mesesDisponiveis();
   var todos=todosLancamentos();
   var despM=ms.map(function(m){
@@ -893,20 +854,16 @@ function renderConferencia(){
   }).join("");
   $("conf-mes").innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mês</th><th class="num">Qtd</th><th class="num">Despesas</th><th class="num">Receitas</th><th class="num">Saldo</th></tr></thead><tbody>'+linhas+'</tbody></table></div>';
 }
-
 function renderChip(){
   var h=$("chip-filtro");
   var antigos=document.querySelectorAll(".detalhe-inline");
   for(var k=0;k<antigos.length;k++)antigos[k].remove();
-
   if(!filtroDash.tipo){h.innerHTML="";return;}
   var rot=filtroDash.tipo==="categoria"?"Categoria":filtroDash.tipo==="forma"?"Forma":"Subcategoria";
   h.innerHTML='<span class="tag tag-blue">'+rot+': '+esc(filtroDash.valor)+'</span>';
-
   var host=filtroDash.onde?$(filtroDash.onde):null;
   if(!host)return;
   var card=host.closest(".card-box")||host.parentNode;
-
   var lista=filtrado().slice().sort(function(a,b){return b.valor-a.valor;});
   var total=soma(lista,"valor");
   var linhas=lista.map(function(l){
@@ -914,7 +871,6 @@ function renderChip(){
       '<td>'+esc(l.subcategoria)+'</td><td>'+esc(l.forma)+(l.cartao?' · '+esc(l.cartao):'')+'</td>'+
       '<td class="num '+(l.tipo==="Receita"?"pos":"neg")+'">'+brl(l.valor)+'</td></tr>';
   }).join("");
-
   var box=document.createElement("div");
   box.className="detalhe-inline";
   box.innerHTML='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--accent)">'+
@@ -942,12 +898,11 @@ function renderDashboard(){
   renderChip();
   renderConferencia();
 }
-
 function renderHub(){
   var t=todosLancamentos();
   var el;
   if((el=$("hub-total")))el.textContent=t.length;
-  if((el=$("hub-nome")))el.textContent=cfg.usuario?cfg.usuario.charAt(0).toUpperCase()+cfg.usuario.slice(1):"Maik";
+  if((el=$("hub-nome")))el.textContent=(cfg.nome||cfg.usuario||"").split(" ")[0]||"você";
   if((el=$("hub-conexao")))el.innerHTML='<span class="pos">conectado</span>';
   if((el=$("hub-sync")))el.textContent=ultimaLeitura?ultimaLeitura.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}):"—";
   var ms=mesesDisponiveis();
@@ -961,12 +916,11 @@ function renderHub(){
   if(m&&(el=$("hub-mes")))el.textContent=mesLabel(m);
   setHub("Base única na planilha · "+t.length+" lançamentos");
 }
-
 function mostrarView(nome){
   ["hub","financeiro","ajustes"].forEach(function(v){$("view-"+v).classList.toggle("hidden",v!==nome);});
   document.querySelectorAll(".bottom-nav .nav-item").forEach(function(b){b.classList.toggle("active",b.dataset.nav===nome);});
   window.scrollTo(0,0);
-  if(nome==="ajustes")atualizarDiagnostico();
+  if(nome==="ajustes"){atualizarDiagnostico();montarPainelUsuarios();}
   if(nome==="hub")renderHub();
   if(nome==="financeiro"){renderHistorico();renderDashboard();}
 }
@@ -975,87 +929,112 @@ function entrarNoApp(){
   $("tela-setup").classList.add("hidden");
   $("tela-app").classList.remove("hidden");
   mostrarView("hub");
-  carregar(true).catch(function(e){setHub("Erro ao ler a planilha: "+e.message);});
+  carregar(true).catch(function(e){
+    if(String(e.message).indexOf("sess")>-1||String(e.message).indexOf("expir")>-1){
+      desconectar("Sua sessão expirou. Entre novamente.");
+    }else{
+      setHub("Erro ao ler a planilha: "+e.message);
+    }
+  });
 }
 function sair(){
+  var tok=cfg.token;
+  if(tok){ try{ chamarPOST({acao:"sair",token:tok}); }catch(e){} }
   try{localStorage.removeItem(LS_SESSAO);}catch(e){}
+  try{localStorage.removeItem(LS_TOKEN);}catch(e){}
+  cfg.token="";
   dados=null;
   $("tela-app").classList.add("hidden");
   $("tela-login").classList.remove("hidden");
   $("login-senha").value="";
   toast("Sessão encerrada");
 }
-
+function desconectar(msg){
+  cfg.token="";
+  dados=null;
+  try{localStorage.removeItem(LS_TOKEN);localStorage.removeItem(LS_SESSAO);}catch(e){}
+  $("tela-app").classList.add("hidden");
+  $("tela-login").classList.remove("hidden");
+  var box=$("login-erro");
+  if(box){box.textContent=msg||"";box.classList.remove("hidden");}
+}
 function iniciarLogin(){
   $("tela-setup").classList.add("hidden");
   $("tela-app").classList.add("hidden");
   $("tela-login").classList.remove("hidden");
-  $("login-usuario").value=cfg.usuario||"maik";
+  $("login-usuario").value=cfg.usuario||"";
   setTimeout(function(){$("login-senha").focus();},80);
 }
 function tentarLogin(e){
   e.preventDefault();
-  var u=$("login-usuario").value.trim(),s=$("login-senha").value.trim();
+  var u=$("login-usuario").value.trim(),senha=$("login-senha").value.trim();
   var box=$("login-erro"),btn=$("btn-entrar");
-  if(!u||!s){box.textContent="Preencha usuário e senha.";box.classList.remove("hidden");return;}
-  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Verificando…';
-  var tokenAntes=cfg.token;
-  cfg.token=s;
-  chamarGET({acao:"ler",token:s}).then(function(j){
-    if(!j.ok)throw new Error(j.erro==="token"?"Senha incorreta.":(j.erro||"Falha na conexão."));
-    cfg.usuario=u;cfg.token=s;gravarCfg();
-    dados=j;
-    ultimaLeitura=new Date();
-    try{localStorage.setItem(LS_SESSAO,JSON.stringify({usuario:u,em:Date.now()}));}catch(x){}
-    box.classList.add("hidden");
-    aplicarDicionario();preencherOpcoes();
-    entrarNoApp();
-  }).catch(function(err){
-    cfg.token=tokenAntes;
-    box.textContent=err.message;
-    box.classList.remove("hidden");
-  }).then(function(){
-    btn.disabled=false;btn.textContent="Entrar";
-  });
+  if(!u||!senha){box.textContent="Preencha usuário e senha.";box.classList.remove("hidden");return;}
+  if(!cfg.url){box.textContent="Falta a URL do servidor. Use Configurar conexão.";box.classList.remove("hidden");return;}
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Entrando…';
+  box.classList.add("hidden");
+  chamarPOST({acao:"login",usuario:u,senha:senha})
+    .then(function(j){
+      if(!j.ok)throw new Error(j.erro||"Não foi possível entrar.");
+      cfg.token=j.token;
+      cfg.usuario=j.usuario;
+      cfg.papel=j.papel||"comum";
+      cfg.nome=j.nome||u;
+      gravarCfg();
+      try{localStorage.setItem(LS_SESSAO,JSON.stringify({usuario:j.usuario,em:Date.now()}));}catch(x){}
+      return carregarDados().then(function(){
+        entrarNoApp();
+        toast("Bem-vindo, "+(cfg.nome||cfg.usuario),"ok");
+        if(j.trocarSenha){
+          setTimeout(function(){toast("Troque sua senha em Ajustes → Minha senha","");},1400);
+        }
+      });
+    })
+    .catch(function(err){
+      box.textContent=err.message;
+      box.classList.remove("hidden");
+    })
+    .then(function(){
+      btn.disabled=false;btn.textContent="Entrar";
+    });
 }
-
 function testarESalvarSetup(e){
   e.preventDefault();
-  var url=$("s-url").value.trim(),user=$("s-user").value.trim(),tok=$("s-token").value.trim();
+  var url=$("s-url").value.trim();
   var box=$("setup-erro"),btn=$("s-btn");
   if(!urlValida(url)){
     box.textContent="URL inválida. Ela deve começar com https:// e terminar em /exec.";
     box.classList.remove("hidden");return;
   }
-  if(!tok){box.textContent="Cole o token que apareceu no editor do Apps Script.";box.classList.remove("hidden");return;}
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Testando…';
-  var backup={url:cfg.url,token:cfg.token,usuario:cfg.usuario};
-  cfg.url=url;cfg.token=tok;cfg.usuario=user||"maik";
-  chamarGET({acao:"ler",token:tok}).then(function(j){
-    if(!j.ok)throw new Error(j.erro==="token"?"Token recusado pela planilha. Confira se copiou o token inteiro.":(j.erro||"Falha na leitura."));
-    gravarCfg();
-    dados=j;ultimaLeitura=new Date();
-    try{localStorage.setItem(LS_SESSAO,JSON.stringify({usuario:cfg.usuario,em:Date.now()}));}catch(x){}
-    box.classList.add("hidden");
-    aplicarDicionario();preencherOpcoes();
-    entrarNoApp();
-    toast("Conectado — "+j.lancamentos.length+" lançamentos lidos","ok");
-  }).catch(function(err){
-    cfg.url=backup.url;cfg.token=backup.token;cfg.usuario=backup.usuario;
-    box.textContent=err.message;
-    box.classList.remove("hidden");
-  }).then(function(){
-    btn.disabled=false;btn.textContent="Testar e salvar";
-  });
+  var backup=cfg.url;
+  cfg.url=url;
+  chamarGET({acao:"ping"})
+    .then(function(j){
+      if(!j.ok)throw new Error("O servidor respondeu, mas não parece ser o ML Soluções.");
+      gravarCfg();
+      box.classList.add("hidden");
+      toast("Servidor conectado (versão "+j.versao+")","ok");
+      iniciarLogin();
+    })
+    .catch(function(err){
+      cfg.url=backup;
+      box.textContent="Não consegui falar com o servidor: "+err.message;
+      box.classList.remove("hidden");
+    })
+    .then(function(){
+      btn.disabled=false;btn.textContent="Testar e salvar";
+    });
 }
-
+function ehAdmin(){ return String(cfg.papel||"").toLowerCase()==="admin"; }
 function atualizarDiagnostico(){
   var linhas=[
     ["URL configurada",cfg.url?'<span class="pos">sim</span>':'<span class="neg">não</span>'],
-    ["Senha (token)",cfg.token?"••••••••":'<span class="neg">vazia</span>'],
-    ["Usuário",esc(cfg.usuario)],
+    ["Sessão",cfg.token?'<span class="pos">ativa</span>':'<span class="neg">nenhuma</span>'],
+    ["Papel",ehAdmin()?"administrador":"comum"],
+    ["Usuário",esc(cfg.usuario)+(cfg.nome?" · "+esc(cfg.nome):"")],
     ["Planilha",dados?'<span class="pos">conectada</span>':'<span class="neg">não lida</span>'],
-    ["Lançamentos na base",dados?todosLancamentos().length:"—"],
+    ["Lançamentos",dados?todosLancamentos().length:"—"],
     ["Itens classificados",dados?Object.keys(dados.classificacao||{}).length:"—"],
     ["Categorias",dados?Object.keys(dados.categorias||{}).length:"—"],
     ["Cartões",dados?((dados.cartoes||[]).length):"—"],
@@ -1074,7 +1053,7 @@ function salvarConn(){
   if(!urlValida(url)){
     msg.className="err-msg";msg.textContent="URL inválida. Deve começar com https:// e terminar em /exec.";msg.classList.remove("hidden");return;
   }
-  cfg.url=url;cfg.usuario=user||"maik";gravarCfg();
+  cfg.url=url;cfg.usuario=user||cfg.usuario;gravarCfg();
   msg.className="notice-info";msg.textContent="Testando…";msg.classList.remove("hidden");
   carregar(true).then(function(j){
     msg.className="notice-ok";
@@ -1083,28 +1062,6 @@ function salvarConn(){
   }).catch(function(e){
     msg.className="err-msg";
     msg.textContent=e.message;
-  });
-}
-function trocarSenha(e){
-  e.preventDefault();
-  var a=$("p-atual").value.trim(),n=$("p-nova").value.trim(),c=$("p-conf").value.trim();
-  var msg=$("senha-msg");
-  function erro(t){msg.className="err-msg";msg.textContent=t;msg.classList.remove("hidden");}
-  if(a!==cfg.token)return erro("A senha atual está incorreta.");
-  if(n.length<8)return erro("A nova senha (token) deve ter pelo menos 8 caracteres.");
-  if(n!==c)return erro("A confirmação não confere.");
-  var backup=cfg.token;
-  cfg.token=n;
-  chamarGET({acao:"ler",token:n}).then(function(j){
-    if(!j.ok)throw new Error("O novo token foi recusado pela planilha.");
-    gravarCfg();
-    msg.className="notice-ok";
-    msg.textContent="Senha alterada e validada contra a planilha.";
-    $("form-senha").reset();
-    atualizarDiagnostico();
-  }).catch(function(err){
-    cfg.token=backup;
-    erro(err.message);
   });
 }
 function exportar(){
@@ -1116,15 +1073,163 @@ function exportar(){
   setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
   toast("Backup exportado","ok");
 }
-
+function montarPainelUsuarios(){
+  if($("card-usuarios"))return;
+  var view=$("view-ajustes");
+  if(!view)return;
+  var alvo=view.querySelector(".stack-gap");
+  if(!alvo)return;
+  var cardSenha=document.createElement("div");
+  cardSenha.className="card-box";
+  cardSenha.id="card-minha-senha";
+  cardSenha.innerHTML=
+    '<h3 style="font-size:.95rem">Minha senha</h3>'+
+    '<p class="muted-txt">Logado como <b>'+esc(cfg.usuario)+'</b>'+(ehAdmin()?' · administrador':'')+'</p>'+
+    '<form id="form-minha-senha" style="margin-top:12px" novalidate>'+
+    '<div><label class="field-lbl" for="ms-atual">Senha atual</label>'+
+    '<input class="inp" type="password" id="ms-atual" autocomplete="current-password"></div>'+
+    '<div style="margin-top:10px"><label class="field-lbl" for="ms-nova">Nova senha (mínimo 6)</label>'+
+    '<input class="inp" type="password" id="ms-nova" autocomplete="new-password"></div>'+
+    '<div style="margin-top:10px"><label class="field-lbl" for="ms-conf">Repita a nova senha</label>'+
+    '<input class="inp" type="password" id="ms-conf" autocomplete="new-password"></div>'+
+    '<div class="btns" style="margin-top:12px"><button type="submit" class="btn-p">Alterar minha senha</button></div>'+
+    '<div id="ms-msg" style="margin-top:10px"></div>'+
+    '</form>';
+  alvo.insertBefore(cardSenha,alvo.firstChild);
+  $("form-minha-senha").addEventListener("submit",function(e){
+    e.preventDefault();
+    var a=$("ms-atual").value,n=$("ms-nova").value,c=$("ms-conf").value;
+    var msg=$("ms-msg");
+    function erro(t){msg.className="err-msg";msg.textContent=t;msg.classList.remove("hidden");}
+    if(!a)return erro("Informe a senha atual.");
+    if(n.length<6)return erro("A nova senha precisa ter ao menos 6 caracteres.");
+    if(n!==c)return erro("A confirmação não confere.");
+    if(n===a)return erro("A nova senha precisa ser diferente da atual.");
+    msg.className="notice-info";msg.textContent="Alterando…";msg.classList.remove("hidden");
+    chamarPOST({acao:"trocarSenha",token:cfg.token,senhaAtual:a,senhaNova:n})
+      .then(function(j){
+        if(!j.ok)throw new Error(j.erro||"Não foi possível alterar.");
+        msg.className="notice-ok";msg.textContent="Senha alterada. Use a nova no próximo acesso.";
+        $("form-minha-senha").reset();
+      })
+      .catch(function(err){erro(err.message);});
+  });
+  if(!ehAdmin())return;
+  var card=document.createElement("div");
+  card.className="card-box";
+  card.id="card-usuarios";
+  card.innerHTML=
+    '<div class="row-between"><h3 style="font-size:.95rem">Usuários do app</h3>'+
+    '<span class="tag tag-blue" id="qtd-usuarios">—</span></div>'+
+    '<p class="muted-txt">Cada pessoa vê apenas os próprios lançamentos.</p>'+
+    '<div id="lista-usuarios" style="margin-top:12px"></div>'+
+    '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">'+
+    '<h3 style="font-size:.92rem">Criar usuário</h3>'+
+    '<form id="form-novo-usuario" style="margin-top:10px" novalidate>'+
+    '<div class="grid-2">'+
+    '<div><label class="field-lbl" for="nu-usuario">Usuário (login)</label>'+
+    '<input class="inp" type="text" id="nu-usuario" placeholder="ex.: maria" autocomplete="off" spellcheck="false"></div>'+
+    '<div><label class="field-lbl" for="nu-nome">Nome</label>'+
+    '<input class="inp" type="text" id="nu-nome" placeholder="ex.: Maria" autocomplete="off"></div>'+
+    '</div>'+
+    '<div class="grid-2" style="margin-top:10px">'+
+    '<div><label class="field-lbl" for="nu-senha">Senha inicial (mín. 6)</label>'+
+    '<input class="inp" type="text" id="nu-senha" placeholder="senha provisória" autocomplete="off" spellcheck="false"></div>'+
+    '<div><label class="field-lbl" for="nu-papel">Papel</label>'+
+    '<select class="inp" id="nu-papel"><option value="comum">Comum</option><option value="admin">Administrador</option></select></div>'+
+    '</div>'+
+    '<div class="helper">A pessoa troca a senha no primeiro acesso, em Ajustes → Minha senha.</div>'+
+    '<div class="btns" style="margin-top:12px"><button type="submit" class="btn-p" id="btn-novo-usuario">Criar usuário</button></div>'+
+    '<div id="nu-msg" style="margin-top:10px"></div>'+
+    '</form></div>';
+  alvo.insertBefore(card,alvo.firstChild);
+  $("form-novo-usuario").addEventListener("submit",function(e){
+    e.preventDefault();
+    var u=$("nu-usuario").value.trim().toLowerCase(),nome=$("nu-nome").value.trim();
+    var senha=$("nu-senha").value,papel=$("nu-papel").value;
+    var msg=$("nu-msg"),btn=$("btn-novo-usuario");
+    function erro(t){msg.className="err-msg";msg.textContent=t;msg.classList.remove("hidden");}
+    if(!/^[a-z0-9._-]{3,20}$/.test(u)){
+      return erro("Usuário: 3 a 20 caracteres, sem acento nem espaço (letras, números, . _ -).");
+    }
+    if(!senha||senha.length<6)return erro("A senha precisa ter ao menos 6 caracteres.");
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Criando…';
+    chamarPOST({acao:"criarUsuario",token:cfg.token,usuario:u,nome:nome||u,senha:senha,papel:papel})
+      .then(function(j){
+        if(!j.ok)throw new Error(j.erro||"Não foi possível criar.");
+        msg.className="notice-ok";
+        msg.textContent="Usuário criado: "+u+". Entregue a senha e peça para trocar no primeiro acesso.";
+        $("form-novo-usuario").reset();
+        carregarUsuarios();
+      })
+      .catch(function(err){erro(err.message);})
+      .then(function(){btn.disabled=false;btn.textContent="Criar usuário";});
+  });
+  carregarUsuarios();
+}
+function carregarUsuarios(){
+  var host=$("lista-usuarios");
+  if(!host)return;
+  host.innerHTML='<p class="muted-txt">Lendo usuários…</p>';
+  chamarPOST({acao:"listarUsuarios",token:cfg.token})
+    .then(function(j){
+      if(!j.ok)throw new Error(j.erro||"Falha ao listar.");
+      var us=j.usuarios||[];
+      var qtd=$("qtd-usuarios"); if(qtd)qtd.textContent=us.length+(us.length===1?" usuário":" usuários");
+      if(!us.length){host.innerHTML='<p class="muted-txt">Nenhum usuário.</p>';return;}
+      host.innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr>'+
+        '<th>Usuário</th><th>Papel</th><th>Status</th><th>Último acesso</th><th class="num">Ações</th>'+
+        '</tr></thead><tbody>'+
+        us.map(function(u){
+          var eu=u.usuario===cfg.usuario;
+          return '<tr>'+
+            '<td><b>'+esc(u.usuario)+'</b>'+(eu?' <span class="tag tag-blue">você</span>':'')+
+              '<div class="muted-txt" style="margin:0">'+esc(u.nome||"")+'</div></td>'+
+            '<td>'+(u.papel==="admin"?'<span class="tag tag-blue">admin</span>':'comum')+'</td>'+
+            '<td>'+(u.ativo?'<span class="tag tag-ok">ativo</span>':'<span class="tag tag-red">inativo</span>')+'</td>'+
+            '<td class="muted-txt">'+esc(String(u.ultimo||"—").substring(0,16))+'</td>'+
+            '<td class="num">'+
+              '<button class="btn-ico" data-reset="'+esc(u.usuario)+'">↺ resetar senha</button> '+
+              (eu?'':'<button class="btn-ico" data-toggle="'+esc(u.usuario)+'" data-ativo="'+(u.ativo?1:0)+'" style="color:'+(u.ativo?'#ef4444':'#22c55e')+'">'+(u.ativo?'desativar':'ativar')+'</button>')+
+            '</td></tr>';
+        }).join('')+'</tbody></table></div>';
+      host.querySelectorAll("[data-reset]").forEach(function(b){
+        b.addEventListener("click",function(){
+          var alvo=b.getAttribute("data-reset");
+          var nova=prompt("Nova senha para "+alvo+" (mínimo 6 caracteres):");
+          if(nova===null)return;
+          if(nova.length<6){toast("A senha precisa ter ao menos 6 caracteres.","erro");return;}
+          chamarPOST({acao:"resetarSenha",token:cfg.token,usuario:alvo,senha:nova})
+            .then(function(r){
+              if(!r.ok)throw new Error(r.erro||"Falha ao resetar.");
+              toast("Senha de "+alvo+" redefinida. Peça para trocar no próximo acesso.","ok");
+              carregarUsuarios();
+            })
+            .catch(function(err){toast(err.message,"erro");});
+        });
+      });
+      host.querySelectorAll("[data-toggle]").forEach(function(b){
+        b.addEventListener("click",function(){
+          var alvo=b.getAttribute("data-toggle");
+          var ativo=b.getAttribute("data-ativo")==="1";
+          chamarPOST({acao:"ativarUsuario",token:cfg.token,usuario:alvo,ativo:!ativo})
+            .then(function(r){
+              if(!r.ok)throw new Error(r.erro||"Falha.");
+              toast(alvo+(ativo?" desativado":" ativado"),"ok");
+              carregarUsuarios();
+            })
+            .catch(function(err){toast(err.message,"erro");});
+        });
+      });
+    })
+    .catch(function(e){
+      host.innerHTML='<div class="err-msg">'+esc(e.message)+'</div>';
+    });
+}
 function bind(){
   lerCfg();
   aprimorarUI();
-
   $("form-setup").addEventListener("submit",testarESalvarSetup);
-  $("s-olho").addEventListener("click",function(){
-    var i=$("s-token");i.type=i.type==="password"?"text":"password";
-  });
   $("form-login").addEventListener("submit",tentarLogin);
   $("btn-olho").addEventListener("click",function(){
     var i=$("login-senha");i.type=i.type==="password"?"text":"password";
@@ -1132,11 +1237,10 @@ function bind(){
   $("btn-config").addEventListener("click",function(){
     $("tela-login").classList.add("hidden");
     $("tela-setup").classList.remove("hidden");
-    $("s-url").value=cfg.url;$("s-user").value=cfg.usuario;$("s-token").value=cfg.token;
+    $("s-url").value=cfg.url;
   });
   $("login-usuario").addEventListener("input",function(){$("login-erro").classList.add("hidden");});
   $("login-senha").addEventListener("input",function(){$("login-erro").classList.add("hidden");});
-
   document.addEventListener("click",function(ev){
     var nav=ev.target.closest("[data-nav]");
     if(nav){
@@ -1162,7 +1266,6 @@ function bind(){
     var fc=ev.target.closest("[data-fechar]");
     if(fc){$(fc.dataset.fechar).classList.remove("open");return;}
   });
-
   $("hub-financeiro").addEventListener("click",function(){mostrarView("financeiro");});
   $("t-desp").addEventListener("click",function(){setTipo("despesa");});
   $("t-rec").addEventListener("click",function(){setTipo("receita");});
@@ -1170,7 +1273,6 @@ function bind(){
   ["l-data","l-forma","l-cartao"].forEach(function(id){$(id).addEventListener("change",atualizarAuto);});
   $("l-data").addEventListener("input",atualizarAuto);
   $("form-lanc").addEventListener("submit",lancar);
-
   ["l-valor","e-valor"].forEach(function(id){
     var el=$(id); if(!el)return;
     el.setAttribute("inputmode","numeric");
@@ -1178,7 +1280,6 @@ function bind(){
     el.addEventListener("input",function(){mascaraMoeda(el);$("lanc-erro").classList.add("hidden");});
     el.addEventListener("blur",function(){if(el.value)mascaraMoeda(el);});
   });
-
   $("h-mes").addEventListener("change",renderHistorico);
   $("h-busca").addEventListener("input",renderHistorico);
   $("dash-mes").addEventListener("change",function(){filtroDash={tipo:null,valor:null};renderDashboard();});
@@ -1189,15 +1290,13 @@ function bind(){
       .catch(function(e){toast(e.message,"erro");})
       .then(function(){b.disabled=false;b.textContent="↻ Atualizar";});
   });
-
   $("e-cat").addEventListener("change",function(){preencherSubs("e-cat","e-sub");});
   $("e-forma").addEventListener("change",atualizarAutoEditar);
   $("form-editar").addEventListener("submit",salvarEdicao);
   $("btn-confirmar-exc").addEventListener("click",confirmarExclusao);
-
   $("btn-salvar-conn").addEventListener("click",salvarConn);
   $("btn-testar").addEventListener("click",salvarConn);
-  $("form-senha").addEventListener("submit",trocarSenha);
+  if($("form-senha"))$("form-senha").addEventListener("submit",function(e){e.preventDefault();toast("Use Ajustes → Minha senha","ok");});
   $("btn-reler").addEventListener("click",function(){
     var m=$("diag-msg");
     m.className="notice-info";m.textContent="Lendo…";m.classList.remove("hidden");
@@ -1207,33 +1306,21 @@ function bind(){
     }).catch(function(e){m.className="err-msg";m.textContent=e.message;});
   });
   $("btn-exportar").addEventListener("click",exportar);
-
   document.querySelectorAll(".modal").forEach(function(m){
     m.addEventListener("click",function(e){if(e.target===m)m.classList.remove("open");});
   });
-
   $("l-data").value=hojeISO();
-  if(!configurado()){
+  if(!cfg.url){
     $("tela-setup").classList.remove("hidden");
-    $("s-url").value=cfg.url||URL_PADRAO;$("s-user").value=cfg.usuario;
-    var av=$("setup-aviso");
-    if(av){
-      av.innerHTML='<b>Neste aparelho falta apenas o token.</b> A URL do servidor já está preenchida. '+
-        'O token são os 24 caracteres que aparecem no log do Apps Script quando você roda <code>configurar</code>.';
-      av.className="notice-ok";
-    }
+    $("s-url").value=URL_PADRAO||"";
     return;
   }
-  var sessao=null;
-  try{sessao=JSON.parse(localStorage.getItem(LS_SESSAO)||"null");}catch(e){sessao=null;}
-  if(sessao&&sessao.usuario){
-    cfg.usuario=sessao.usuario;
+  if(cfg.token){
     entrarNoApp();
-  }else{
-    iniciarLogin();
+    return;
   }
+  iniciarLogin();
 }
-
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",bind);
 else bind();
 })();
